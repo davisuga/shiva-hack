@@ -766,8 +766,22 @@ export function ReceiptMagicUpload({
 
           <div className="flex min-w-[200px] flex-col gap-2">
             <div className="flex gap-2">
-       
-        
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isUploadPending}
+                className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[11px_6px] text-[12px] font-semibold text-notia-text-secondary transition hover:bg-[rgba(0,0,0,0.055)] hover:text-notia-text active:scale-[0.97] disabled:opacity-60"
+              >
+                &#128247; {t("scanCamera")}
+              </button>
+              <button
+                type="button"
+                onClick={() => galleryInputRef.current?.click()}
+                disabled={isUploadPending}
+                className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[11px_6px] text-[12px] font-semibold text-notia-text-secondary transition hover:bg-[rgba(0,0,0,0.055)] hover:text-notia-text active:scale-[0.97] disabled:opacity-60"
+              >
+                &#128444;&#65039; {t("scanGallery")}
+              </button>
               <button
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
