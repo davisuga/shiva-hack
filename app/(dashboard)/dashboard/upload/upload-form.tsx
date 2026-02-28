@@ -10,8 +10,12 @@ import {
   submitReceiptForProcessing,
   type UploadReceiptState,
 } from "@/lib/actions/process";
+import {
+  normalizeProcessStatus,
+  ProcessStatus,
+} from "@/lib/process-status";
 
-const initialUploadReceiptState: UploadReceiptState = {
+const initialUploadState: UploadReceiptState = {
   status: "idle",
 };
 
@@ -26,9 +30,9 @@ function SubmitButton() {
 }
 
 export function UploadReceiptForm() {
-  const [state, formAction] = useActionState(
+  const [uploadState, formAction] = useActionState(
     submitReceiptForProcessing,
-    initialUploadReceiptState
+    initialUploadState
   );
   const [tracking, setTracking] = useState<{
     status?: string;
@@ -40,11 +44,14 @@ export function UploadReceiptForm() {
   const [isCancelling, setIsCancelling] = useState(false);
 
   const currentStatus = useMemo(() => {
-    return tracking?.status || state.processingStatus || "queued";
-  }, [tracking?.status, state.processingStatus]);
+    if (!tracking?.status && !uploadState.processingStatus) {
+      return ProcessStatus.PROCESSING;
+    }
+    return normalizeProcessStatus(tracking?.status ?? uploadState.processingStatus);
+  }, [tracking?.status, uploadState.processingStatus]);
 
   useEffect(() => {
-    if (state.status !== "success" || !state.processId) return;
+    if (uploadState.status !== "success" || !uploadState.processId) return;
 
     let active = true;
     let inFlight = false;
@@ -57,7 +64,7 @@ export function UploadReceiptForm() {
       inFlight = true;
 
       try {
-        const result = await syncReceiptProcessingStatus(state.processId!);
+        const result = await syncReceiptProcessingStatus(uploadState.processId!);
         if (!active || !result.ok) return;
 
         setTracking({
@@ -88,15 +95,15 @@ export function UploadReceiptForm() {
       setIsPolling(false);
       window.clearInterval(timer);
     };
-  }, [state.status, state.processId]);
+  }, [uploadState.status, uploadState.processId]);
 
   const handleCancel = async () => {
-    if (!state.processId || isCancelling) return;
+    if (!uploadState.processId || isCancelling) return;
     if (!window.confirm("Cancel this processing job?")) return;
 
     setIsCancelling(true);
     try {
-      const result = await cancelReceiptProcessing(state.processId);
+      const result = await cancelReceiptProcessing(uploadState.processId);
       if (!result.ok) return;
 
       setTracking({
@@ -128,15 +135,15 @@ export function UploadReceiptForm() {
 
       <SubmitButton />
 
-      {state.status === "error" && (
-        <p className="text-sm text-red-600">{state.message}</p>
+      {uploadState.status === "error" && (
+        <p className="text-sm text-red-600">{uploadState.message}</p>
       )}
 
-      {state.status === "success" && (
+      {uploadState.status === "success" && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          <p>{state.message}</p>
-          {state.processId && (
-            <p className="mt-1 font-mono text-xs">process_id: {state.processId}</p>
+          <p>{uploadState.message}</p>
+          {uploadState.processId && (
+            <p className="mt-1 font-mono text-xs">process_id: {uploadState.processId}</p>
           )}
           <p className="mt-1">
             status: <span className="font-semibold">{currentStatus}</span>
@@ -153,7 +160,7 @@ export function UploadReceiptForm() {
             {isPolling ? "polling database status..." : "status polling paused"}
             {tracking?.source ? ` (${tracking.source})` : ""}
           </p>
-          {state.processId && !isTerminalStatus(currentStatus) && (
+          {uploadState.processId && !isTerminalStatus(currentStatus) && (
             <Button
               type="button"
               variant="outline"
@@ -175,15 +182,6 @@ export function UploadReceiptForm() {
 
 function isTerminalStatus(status?: string) {
   if (!status) return false;
-
-  const normalized = status.toLowerCase();
-  return (
-    normalized === "done" ||
-    normalized === "completed" ||
-    normalized === "success" ||
-    normalized === "failed" ||
-    normalized === "error" ||
-    normalized === "cancelled" ||
-    normalized === "canceled"
-  );
+  const normalized = normalizeProcessStatus(status);
+  return normalized === ProcessStatus.PROCESSED || normalized === ProcessStatus.ERROR;
 }

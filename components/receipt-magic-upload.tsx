@@ -17,6 +17,7 @@ import {
   submitReceiptForProcessing,
   type UploadReceiptState,
 } from "@/lib/actions/process";
+import { normalizeProcessStatus, ProcessStatus } from "@/lib/process-status";
 import {
   createManualParsedReceipt,
   deleteManualReceiptEntry,
@@ -85,7 +86,7 @@ const initialDeleteState: DeleteManualReceiptState = {
 
 type TrackedProcess = {
   processId: string;
-  status: string;
+  status: ProcessStatus;
   updatedAt?: string;
   errorMessage?: string | null;
 };
@@ -106,6 +107,10 @@ function loadTrackedProcessesFromStorage(): TrackedProcess[] {
           typeof item.processId === "string" &&
           typeof item.status === "string"
       )
+      .map((item) => ({
+        ...item,
+        status: normalizeProcessStatus(item.status),
+      }))
       .slice(0, 20);
   } catch {
     return [];
@@ -530,7 +535,9 @@ export function ReceiptMagicUpload({
     const timer = setTimeout(() => {
       upsertTrackedProcess({
         processId: uploadState.processId!,
-        status: uploadState.processingStatus ?? "queued",
+        status: normalizeProcessStatus(
+          uploadState.processingStatus ?? ProcessStatus.PROCESSING
+        ),
         updatedAt: new Date().toISOString(),
       });
     }, 0);
@@ -594,57 +601,23 @@ export function ReceiptMagicUpload({
   }, [activeProcessIds]);
 
   const renderProcessStatusLabel = useCallback(
-    (status: string) => {
-      const normalized = status.toLowerCase();
-      if (normalized === "queued") return t("scanStatusQueued");
-      if (normalized === "processing" || normalized === "running") {
-        return t("scanStatusProcessing");
-      }
-      if (normalized === "canceled" || normalized === "cancelled") {
-        return t("scanStatusCanceled");
-      }
-      if (
-        normalized === "completed" ||
-        normalized === "done" ||
-        normalized === "success" ||
-        normalized === "succeeded"
-      ) {
-        return t("scanStatusCompleted");
-      }
-      if (
-        normalized === "error" ||
-        normalized === "failed"
-      ) {
-        return t("scanStatusError");
-      }
+    (status: ProcessStatus) => {
+      if (status === ProcessStatus.PROCESSING) return t("scanStatusProcessing");
+      if (status === ProcessStatus.PROCESSED) return t("scanStatusCompleted");
+      if (status === ProcessStatus.ERROR) return t("scanStatusError");
       return t("scanStatusUnknown");
     },
     [t]
   );
 
-  const processStatusClassName = useCallback((status: string) => {
-    const normalized = status.toLowerCase();
-    if (normalized === "queued") {
-      return "border-[rgba(0,122,255,0.2)] bg-[rgba(0,122,255,0.08)] text-notia-accent";
-    }
-    if (normalized === "processing" || normalized === "running") {
+  const processStatusClassName = useCallback((status: ProcessStatus) => {
+    if (status === ProcessStatus.PROCESSING) {
       return "border-[rgba(255,149,0,0.25)] bg-[rgba(255,149,0,0.12)] text-[#c77700]";
     }
-    if (
-      normalized === "completed" ||
-      normalized === "done" ||
-      normalized === "success" ||
-      normalized === "succeeded"
-    ) {
+    if (status === ProcessStatus.PROCESSED) {
       return "border-[rgba(52,199,89,0.25)] bg-notia-green-dim text-notia-green";
     }
-    if (normalized === "canceled" || normalized === "cancelled") {
-      return "border-[rgba(0,0,0,0.12)] bg-notia-bg text-notia-text-muted";
-    }
-    if (
-      normalized === "error" ||
-      normalized === "failed"
-    ) {
+    if (status === ProcessStatus.ERROR) {
       return "border-[rgba(255,59,48,0.25)] bg-notia-red-dim text-notia-red";
     }
     return "border-[rgba(0,0,0,0.12)] bg-notia-bg text-notia-text-muted";
@@ -670,7 +643,7 @@ export function ReceiptMagicUpload({
           setLocalMessage(result.message ?? t("scanCancelError"));
           return;
         }
-        const canceledStatus = result.status;
+        const canceledStatus = normalizeProcessStatus(result.status);
 
         setTrackedProcesses((prev) =>
           prev.map((item) => {
@@ -1213,15 +1186,6 @@ export function ReceiptMagicUpload({
 }
 
 function isTerminalProcessStatus(status: string) {
-  const normalized = status.toLowerCase();
-  return (
-    normalized === "completed" ||
-    normalized === "done" ||
-    normalized === "success" ||
-    normalized === "succeeded" ||
-    normalized === "error" ||
-    normalized === "failed" ||
-    normalized === "canceled" ||
-    normalized === "cancelled"
-  );
+  const normalized = normalizeProcessStatus(status);
+  return normalized === ProcessStatus.PROCESSED || normalized === ProcessStatus.ERROR;
 }

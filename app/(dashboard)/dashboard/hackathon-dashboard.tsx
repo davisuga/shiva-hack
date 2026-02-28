@@ -107,9 +107,6 @@ export default function HackathonDashboard({
   const [metric, setMetric] = useState<"price" | "qty">("price");
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
   const [suggestionActions, setSuggestionActions] = useState<Record<string, "plan" | "bought">>({});
-  const [aiState, setAiState] = useState<"idle" | "processing" | "result">("idle");
-  const [procStep, setProcStep] = useState(0);
-  const [procProgress, setProcProgress] = useState(0);
   const [expandedSug, setExpandedSug] = useState<string | null>(null);
 
   const categories = useMemo(() => {
@@ -164,39 +161,6 @@ export default function HackathonDashboard({
       [chartCategory]: chartValues[index] ?? 0,
     }));
   }, [chartCategory, chartValues, data.months]);
-
-
-  const startAI = () => {
-    setAiState("processing");
-    setProcStep(0);
-    setProcProgress(0);
-    const steps = [
-      t("aiStepReadHistory"),
-      t("aiStepIdentifyPatterns"),
-      t("aiStepComparePrices"),
-      t("aiStepCalculateSavings"),
-      t("aiStepGenerateSuggestions"),
-    ];
-    let i = 0;
-    const iv = setInterval(() => {
-      if (i < steps.length) {
-        setProcStep(i);
-        setProcProgress(((i + 1) / steps.length) * 100);
-        i++;
-      } else {
-        clearInterval(iv);
-        setTimeout(() => setAiState("result"), 400);
-      }
-    }, 650);
-  };
-
-  const resetAI = () => {
-    setDismissedSuggestions(new Set());
-    setSuggestionActions({});
-    setExpandedSug(null);
-    setAiState("idle");
-  };
-
   const applySuggestionAction = (suggestionId: string, action: "plan" | "bought") => {
     setSuggestionActions((prev) => ({ ...prev, [suggestionId]: action }));
     setDismissedSuggestions((prev) => {
@@ -206,14 +170,6 @@ export default function HackathonDashboard({
     });
     setExpandedSug(null);
   };
-
-  const procSteps = [
-    t("aiStepReadHistory"),
-    t("aiStepIdentifyPatterns"),
-    t("aiStepComparePrices"),
-    t("aiStepCalculateSavings"),
-    t("aiStepGenerateSuggestions"),
-  ];
   const actionValues = Object.values(suggestionActions);
   const handledPlanCount = actionValues.filter((value) => value === "plan").length;
   const handledBoughtCount = actionValues.filter((value) => value === "bought").length;
@@ -244,50 +200,7 @@ export default function HackathonDashboard({
             <span className="text-[10px] font-bold uppercase tracking-[0.8px] text-notia-accent">{t("aiLabel")}</span>
           </div>
 
-          {/* STATE: idle */}
-          {aiState === "idle" && (
-            <div className="animate-fade-up">
-              <div className="my-3.5 rounded-[16px] border border-[rgba(0,0,0,0.055)] bg-[rgba(255,255,255,0.6)] p-[16px_18px]">
-                <span className="block text-[22px] font-black tracking-[-0.8px] text-notia-accent">{formatCurrency(data.totalSpentMonth)}</span>
-                <p className="text-[13px] leading-relaxed text-notia-text-secondary">
-                  {t("aiIntroBefore")}{" "}
-                  <strong className="font-bold text-notia-text">{t("aiIntroStrong")}</strong>{" "}
-                  {t("aiIntroAfter")}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={startAI}
-                className="flex w-full items-center justify-center gap-[7px] rounded-[16px] bg-notia-accent px-3.5 py-3.5 text-[14px] font-extrabold tracking-[-0.2px] text-white shadow-[0_3px_12px_rgba(0,122,255,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_5px_20px_rgba(0,122,255,0.44)] active:translate-y-0"
-              >
-                <span className="text-[12px]">&#10022;</span>
-                {t("aiAnalyzeNow")}
-              </button>
-            </div>
-          )}
-
-          {/* STATE: processing */}
-          {aiState === "processing" && (
-            <div className="animate-fade-up flex flex-col items-center gap-3 py-5">
-              <div className="relative h-16 w-16">
-                <svg width="64" height="64" className="animate-spin-slow">
-                  <circle cx="32" cy="32" r="26" fill="none" stroke="rgba(0,122,255,0.12)" strokeWidth="3" />
-                  <circle cx="32" cy="32" r="26" fill="none" stroke="url(#sg)" strokeWidth="3" strokeDasharray="50 115" strokeLinecap="round" />
-                  <defs><linearGradient id="sg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stopColor="#007aff" /><stop offset="100%" stopColor="#34c759" /></linearGradient></defs>
-                </svg>
-                <div className="absolute left-1/2 top-1/2 flex h-10 w-10 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[12px] border border-[rgba(0,122,255,0.2)] bg-[linear-gradient(135deg,rgba(0,122,255,0.12),rgba(52,199,89,0.1))] text-[15px]">&#10022;</div>
-              </div>
-              <p className="text-[15px] font-extrabold tracking-[-0.3px]">{t("aiAnalyzing")}</p>
-              <p className="min-h-[18px] text-center text-[12px] text-notia-text-muted">{procSteps[procStep]}</p>
-              <div className="h-1 w-full overflow-hidden rounded-[6px] bg-notia-bg">
-                <div className="h-full rounded-[6px] bg-linear-to-r from-notia-accent to-notia-green transition-[width] duration-500 ease-out" style={{ width: `${procProgress}%` }} />
-              </div>
-            </div>
-          )}
-
-          {/* STATE: result */}
-          {aiState === "result" && (
-            <div className="animate-fade-up">
+          <div className="animate-fade-up">
               {/* Hero economy number */}
               <div className="my-3.5 flex items-center justify-between gap-3 rounded-[16px] border border-[rgba(52,199,89,0.2)] bg-[linear-gradient(135deg,rgba(52,199,89,0.1),rgba(0,122,255,0.07))] p-[16px_18px]">
                 <div>
@@ -416,22 +329,7 @@ export default function HackathonDashboard({
                               })}
                             </p>
 
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => applySuggestionAction(sug.id, "plan")}
-                                className="flex flex-1 items-center justify-center gap-1 rounded-[10px] bg-notia-green border border-notia-green px-2 py-[9px] text-[12px] font-bold text-white shadow-[0_2px_6px_rgba(52,199,89,0.25)]"
-                              >
-                                &#10003; {t("actionCreatePlan")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => applySuggestionAction(sug.id, "bought")}
-                                className="rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-transparent px-3 py-[9px] text-[12px] font-semibold text-notia-text-muted hover:bg-[rgba(0,0,0,0.03)]"
-                              >
-                                {t("actionMarkBought")}
-                              </button>
-                            </div>
+                    
                           </div>
                         )}
                       </div>
@@ -445,12 +343,7 @@ export default function HackathonDashboard({
                 <span className="text-notia-text-muted">{t("remainingSavingsLabel")}</span>
                 <span className="text-[14px] font-black tracking-[-0.4px] text-notia-green">{formatCompactCurrency(remainingSavings)}{t("perMonthSuffix")}</span>
               </div>
-
-              <button type="button" onClick={resetAI} className="mt-2.5 inline-block text-[11px] text-notia-text-muted underline hover:text-notia-accent">
-                &#8617; {t("redoAnalysis")}
-              </button>
-            </div>
-          )}
+          </div>
         </div>
       </div>
       {/* ── KPI ROW ── */}

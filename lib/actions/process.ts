@@ -2,33 +2,32 @@
 
 import { requireUserId } from "@/lib/auth-server";
 import { prisma } from "@/lib/db";
+import {
+  isTerminalProcessStatus,
+  normalizeProcessStatus,
+  ProcessStatus,
+} from "@/lib/process-status";
 import { revalidatePath } from "next/cache";
 
 const DEFAULT_RECEIPT_PROCESSOR_BASE_URL =
   "http://shiva-hack-worker-x7xlvu-ef2c9a-216-126-235-10.traefik.me/";
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
-export enum ProcessStatus {
-  PROCESSING = "Processing",
-  PROCESSED = "Processed",
-  ERROR = "Error",
-}
-
 export type UploadReceiptState = {
-  status: ProcessStatus;
+  status: "idle" | "success" | "error";
   message?: string;
   processId?: string;
-  processingStatus?: string;
+  processingStatus?: ProcessStatus;
 };
 
 export type ProcessingStatusResult = {
   ok: boolean;
   processId: string;
-  status?: string;
+  status?: ProcessStatus;
   errorMessage?: string | null;
   createdAt?: string;
   updatedAt?: string;
-  source?: "worker" | "database";
+  source?: "database";
   message?: string;
 };
 
@@ -117,7 +116,7 @@ export async function submitReceiptForProcessing(
       status?: string;
       message?: string;
     }>(response);
-    const processingStatus = responseData?.status || ProcessStatus.PROCESSING;
+    const processingStatus = normalizeProcessStatus(responseData?.status);
 
     await prisma.processStatus.update({
       where: {
@@ -144,13 +143,13 @@ export async function submitReceiptForProcessing(
     await prisma.processStatus.upsert({
       where: { processId },
       update: {
-        status: "error",
+        status: ProcessStatus.ERROR,
         errorMessage: "Could not send image to processor.",
         updatedAt: new Date().toISOString(),
       },
       create: {
         processId,
-        status: "error",
+        status: ProcessStatus.ERROR,
         errorMessage: "Could not send image to processor.",
         createdAt: nowIso,
         updatedAt: new Date().toISOString(),
@@ -201,7 +200,7 @@ export async function cancelReceiptProcessing(
     return {
       ok: true,
       processId: current.processId,
-      status: current.status,
+      status: normalizeProcessStatus(current.status),
       errorMessage: current.errorMessage,
       createdAt: current.createdAt,
       updatedAt: current.updatedAt,
@@ -225,7 +224,7 @@ export async function cancelReceiptProcessing(
   return {
     ok: true,
     processId: canceled.processId,
-    status: canceled.status,
+    status: normalizeProcessStatus(canceled.status),
     errorMessage: canceled.errorMessage,
     createdAt: canceled.createdAt,
     updatedAt: canceled.updatedAt,
@@ -273,7 +272,7 @@ export async function syncReceiptProcessingStatuses(
     return {
       ok: true,
       processId: row.processId,
-      status: row.status,
+      status: normalizeProcessStatus(row.status),
       errorMessage: row.errorMessage,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
@@ -313,7 +312,7 @@ async function getReceiptProcessingStatusFromDatabase(
   return {
     ok: true,
     processId: localStatus.processId,
-    status: localStatus.status,
+    status: normalizeProcessStatus(localStatus.status),
     errorMessage: localStatus.errorMessage,
     createdAt: localStatus.createdAt,
     updatedAt: localStatus.updatedAt,
@@ -339,10 +338,5 @@ async function safeJson<T>(response: Response): Promise<T | null> {
 }
 
 function isTerminalStatus(status?: string) {
-  if (!status) return false;
-
-  return (
-    status === ProcessStatus.PROCESSED ||
-    status === ProcessStatus.ERROR
-  );
+  return isTerminalProcessStatus(status);
 }
