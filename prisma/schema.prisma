@@ -25,7 +25,7 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
-  @@map("user")
+ 
 }
 
 model Receipt {
@@ -38,8 +38,10 @@ model Receipt {
   imageUrl    String? // Opcional: link da foto no S3/Supabase
   items       Item[]
   processId   String?  @unique
-  process     ProcessStatus? @relation(fields: [processId], references: [process_id])
+  process     ProcessStatus? @relation(fields: [processId], references: [processId])
   createdAt   DateTime @default(now())
+
+ 
 }
 
 model Item {
@@ -53,6 +55,8 @@ model Item {
   quantity       Float
   unitPrice      Float
   totalPrice     Float // quantity * unitPrice
+
+ 
 }
 
 model Session {
@@ -68,7 +72,8 @@ model Session {
 
   @@unique([token])
   @@index([userId])
-  @@map("session")
+
+ 
 }
 
 model Account {
@@ -88,7 +93,7 @@ model Account {
   updatedAt             DateTime  @updatedAt
 
   @@index([userId])
-  @@map("account")
+ 
 }
 
 model Verification {
@@ -100,16 +105,16 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@index([identifier])
-  @@map("verification")
+ 
 }
 
 model ProcessStatus {
-  process_id    String  @id
+  processId    String  @id
   status        String
-  error_message String?
-  created_at    String
-  updated_at    String
+  errorMessage String?
+  createdAt    String
+  updatedAt    String
   receipt       Receipt?
 
-  @@map("process_status")
+ 
 }
