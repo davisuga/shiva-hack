@@ -33,7 +33,7 @@ export type ProcessingStatusResult = {
 
 export async function submitReceiptForProcessing(
   _prevState: UploadReceiptState,
-  formData: FormData
+  formData: FormData,
 ): Promise<UploadReceiptState> {
   const userId = await requireUserId();
   const file = formData.get("receiptImage");
@@ -81,7 +81,11 @@ export async function submitReceiptForProcessing(
         updatedAt: nowIso,
       },
     });
-
+    console.log("Submitting receipt for processing:", processId, {
+      processUrl,
+      userId,
+      imageB64,
+    });
     const response = await fetch(processUrl, {
       method: "POST",
       headers: {
@@ -137,7 +141,8 @@ export async function submitReceiptForProcessing(
       processId,
       processingStatus,
       message:
-        responseData?.message || "Receipt queued. Notia is processing your image.",
+        responseData?.message ||
+        "Receipt queued. Notia is processing your image.",
     };
   } catch {
     await prisma.processStatus.upsert({
@@ -165,14 +170,14 @@ export async function submitReceiptForProcessing(
 }
 
 export async function syncReceiptProcessingStatus(
-  processId: string
+  processId: string,
 ): Promise<ProcessingStatusResult> {
   await requireUserId();
   return getReceiptProcessingStatusFromDatabase(processId);
 }
 
 export async function cancelReceiptProcessing(
-  processId: string
+  processId: string,
 ): Promise<ProcessingStatusResult> {
   await requireUserId();
 
@@ -233,7 +238,7 @@ export async function cancelReceiptProcessing(
 }
 
 export async function syncReceiptProcessingStatuses(
-  processIds: string[]
+  processIds: string[],
 ): Promise<{ ok: boolean; results: ProcessingStatusResult[] }> {
   await requireUserId();
 
@@ -242,8 +247,8 @@ export async function syncReceiptProcessingStatuses(
       processIds
         .filter((value): value is string => typeof value === "string")
         .map((value) => value.trim())
-        .filter((value) => value.length > 0)
-    )
+        .filter((value) => value.length > 0),
+    ),
   ).slice(0, 20);
 
   if (uniqueProcessIds.length === 0) {
@@ -287,7 +292,7 @@ export async function syncReceiptProcessingStatuses(
 }
 
 async function getReceiptProcessingStatusFromDatabase(
-  processId: string
+  processId: string,
 ): Promise<ProcessingStatusResult> {
   if (!processId) {
     return {
