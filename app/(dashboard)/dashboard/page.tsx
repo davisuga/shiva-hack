@@ -69,6 +69,7 @@ export default async function DashboardPage() {
       monthlyPrice: monthlyPrices,
       monthlyQty: monthlyQtys,
       monthlyQuantity: g.totalQuantity,
+      recommendationUnits: g.unit === "UNIT" ? g.totalQuantity : g.purchaseCount,
       monthlySpent: g.totalSpent,
       purchaseCount: g.purchaseCount,
       unit: g.unit,
@@ -76,19 +77,20 @@ export default async function DashboardPage() {
   });
 
   const suggestions: SuggestionData[] = products
-    .filter((p) => p.monthlyQuantity > 6 && p.latestPrice > 0)
+    .filter((p) => p.recommendationUnits > 6 && p.latestPrice > 0)
     .slice(0, 5)
     .map((p) => {
       const bulkDiscount = 0.8;
       const bulkUnitPrice = p.latestPrice * bulkDiscount;
       const monthlyQty = Math.max(1, p.monthlyQuantity);
+      const recommendationCount = Math.max(1, p.recommendationUnits);
       const savingMonthly = (p.latestPrice - bulkUnitPrice) * monthlyQty;
       return {
         id: `sug-${p.id}`,
         productId: p.id,
         title: p.name,
         description: t("bulkCardDescription", {
-          count: Number(monthlyQty.toFixed(1)),
+          count: Number(recommendationCount.toFixed(1)),
         }),
         savingMonthly: Math.max(0, savingMonthly),
         currentUnitPrice: p.latestPrice,

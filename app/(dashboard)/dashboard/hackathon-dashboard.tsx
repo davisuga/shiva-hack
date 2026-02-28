@@ -23,6 +23,7 @@ export type ProductCardData = {
   monthlyPrice: number[];
   monthlyQty: number[];
   monthlyQuantity: number;
+  recommendationUnits: number;
   monthlySpent: number;
   purchaseCount: number;
   unit: ItemUnit;
@@ -141,8 +142,8 @@ export default function HackathonDashboard({
   const lowVolumeProducts = useMemo(
     () =>
       data.products
-        .filter((p) => p.monthlyQuantity <= 6)
-        .sort((a, b) => b.monthlyQuantity - a.monthlyQuantity)
+        .filter((p) => p.recommendationUnits <= 6)
+        .sort((a, b) => b.recommendationUnits - a.recommendationUnits)
         .slice(0, 3),
     [data.products]
   );
@@ -245,10 +246,14 @@ export default function HackathonDashboard({
                         >
                           <span className="font-semibold text-notia-text">{product.name}</span>
                           <span className="text-notia-text-muted">
-                            {t("noRecommendationCount", {
-                              count: Number(product.monthlyQuantity.toFixed(1)),
-                              unitLabel: getItemUnitShortLabel(product.unit, locale),
-                            })}
+                            {product.unit === "UNIT"
+                              ? t("noRecommendationCount", {
+                                  count: Number(product.recommendationUnits.toFixed(1)),
+                                  unitLabel: getItemUnitShortLabel(product.unit, locale),
+                                })
+                              : t("noRecommendationCountPurchases", {
+                                  count: product.recommendationUnits,
+                                })}
                           </span>
                         </div>
                       ))}

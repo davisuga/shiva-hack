@@ -52,6 +52,7 @@
     "allRecommendationsHandledBody": "You already acted on all current recommendations. Keep scanning receipts to unlock new opportunities.",
     "allRecommendationsHandledMeta": "{planCount} bulk plans created, {boughtCount} purchases marked as wholesale.",
     "noRecommendationCount": "{count} {unitLabel} so far",
+    "noRecommendationCountPurchases": "{count, plural, one {# purchase so far} other {# purchases so far}}",
     "trustSignal": "Based on {count} items, avg retail {avgRetail}/{unitLabel}, assumed wholesale -20%.",
     "actionCreatePlan": "Create bulk plan",
     "actionMarkBought": "Mark as bought in wholesale",

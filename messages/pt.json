@@ -52,6 +52,7 @@
     "allRecommendationsHandledBody": "Você já agiu sobre todas as recomendações atuais. Continue escaneando notas para liberar novas oportunidades.",
     "allRecommendationsHandledMeta": "{planCount} planos de atacado criados, {boughtCount} compras marcadas como atacado.",
     "noRecommendationCount": "{count} {unitLabel} até agora",
+    "noRecommendationCountPurchases": "{count, plural, one {# compra até agora} other {# compras até agora}}",
     "trustSignal": "Baseado em {count} itens, média no varejo {avgRetail}/{unitLabel}, atacado assumido em -20%.",
     "actionCreatePlan": "Criar plano de atacado",
     "actionMarkBought": "Marcar como comprado no atacado",
