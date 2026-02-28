@@ -254,15 +254,8 @@ export function ReceiptMagicUpload({
 
   useEffect(() => {
     if (deleteState.status !== "success") return;
-
-    setDeletingReceiptId(null);
-
-    if (editingReceiptId === deleteState.receiptId) {
-      resetManualForm();
-    }
-
     router.refresh();
-  }, [deleteState.receiptId, deleteState.status, editingReceiptId, resetManualForm, router]);
+  }, [deleteState.status, router]);
 
   const sendFile = useCallback(
     (file: File) => {
@@ -371,12 +364,16 @@ export function ReceiptMagicUpload({
     (receiptId: string) => {
       if (!window.confirm(t("manualDeleteConfirm"))) return;
 
+      if (editingReceiptId === receiptId) {
+        resetManualForm();
+      }
+
       setDeletingReceiptId(receiptId);
       const formData = new FormData();
       formData.append("manualReceiptId", receiptId);
       deleteAction(formData);
     },
-    [deleteAction, t]
+    [deleteAction, editingReceiptId, resetManualForm, t]
   );
 
   const formatEntryDate = useCallback(

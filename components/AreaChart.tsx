@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // Tremor AreaChart [v1.0.0]
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -76,7 +77,7 @@ const LegendItem = ({
           // text color
           "text-gray-700 dark:text-gray-300",
           hasOnValueChange &&
-            "group-hover:text-gray-900 dark:group-hover:text-gray-50",
+          "group-hover:text-gray-900 dark:group-hover:text-gray-50",
           activeLegend && activeLegend !== name ? "opacity-40" : "opacity-100",
         )}
       >
@@ -655,10 +656,10 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
             onClick={
               hasOnValueChange && (activeLegend || activeDot)
                 ? () => {
-                    setActiveDot(undefined)
-                    setActiveLegend(undefined)
-                    onValueChange?.(null)
-                  }
+                  setActiveDot(undefined)
+                  setActiveLegend(undefined)
+                  onValueChange?.(null)
+                }
                 : undefined
             }
             margin={{
@@ -752,15 +753,15 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
               content={({ active, payload, label }) => {
                 const cleanPayload: TooltipProps["payload"] = payload
                   ? payload.map((item: any) => ({
-                      category: item.dataKey,
-                      value: item.value,
-                      index: item.payload[index],
-                      color: categoryColors.get(
-                        item.dataKey,
-                      ) as AvailableChartColorsKeys,
-                      type: item.type,
-                      payload: item.payload,
-                    }))
+                    category: item.dataKey,
+                    value: item.value,
+                    index: item.payload[index],
+                    color: categoryColors.get(
+                      item.dataKey,
+                    ) as AvailableChartColorsKeys,
+                    type: item.type,
+                    payload: item.payload,
+                  }))
                   : []
 
                 if (
@@ -768,8 +769,10 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                   (active !== prevActiveRef.current ||
                     label !== prevLabelRef.current)
                 ) {
+                  // @ts-expect-error
                   tooltipCallback({ active, payload: cleanPayload, label })
                   prevActiveRef.current = active
+                  // @ts-expect-error
                   prevLabelRef.current = label
                 }
 
@@ -778,12 +781,14 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                     <CustomTooltip
                       active={active}
                       payload={cleanPayload}
+                      // @ts-expect-error
                       label={label}
                     />
                   ) : (
                     <ChartTooltip
                       active={active}
                       payload={cleanPayload}
+                      // @ts-expect-error
                       label={label}
                       valueFormatter={valueFormatter}
                     />
@@ -804,7 +809,7 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
                     activeLegend,
                     hasOnValueChange
                       ? (clickedLegendItem: string) =>
-                          onCategoryClick(clickedLegendItem)
+                        onCategoryClick(clickedLegendItem)
                       : undefined,
                     enableLegendSlider,
                     legendPosition,
@@ -956,26 +961,26 @@ const AreaChart = React.forwardRef<HTMLDivElement, AreaChartProps>(
             {/* hidden lines to increase clickable target area */}
             {onValueChange
               ? categories.map((category) => (
-                  <Line
-                    className={cx("cursor-pointer")}
-                    strokeOpacity={0}
-                    key={category}
-                    name={category}
-                    type="linear"
-                    dataKey={category}
-                    stroke="transparent"
-                    fill="transparent"
-                    legendType="none"
-                    tooltipType="none"
-                    strokeWidth={12}
-                    connectNulls={connectNulls}
-                    onClick={(props: any, event) => {
-                      event.stopPropagation()
-                      const { name } = props
-                      onCategoryClick(name)
-                    }}
-                  />
-                ))
+                <Line
+                  className={cx("cursor-pointer")}
+                  strokeOpacity={0}
+                  key={category}
+                  name={category}
+                  type="linear"
+                  dataKey={category}
+                  stroke="transparent"
+                  fill="transparent"
+                  legendType="none"
+                  tooltipType="none"
+                  strokeWidth={12}
+                  connectNulls={connectNulls}
+                  onClick={(props: any, event) => {
+                    event.stopPropagation()
+                    const { name } = props
+                    onCategoryClick(name)
+                  }}
+                />
+              ))
               : null}
           </RechartsAreaChart>
         </ResponsiveContainer>

@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ReceiptMagicUpload } from "@/components/receipt-magic-upload";
-import { AreaChartHero } from "@/components/AreaChartExample";
+import { AreaChart } from "@/components/AreaChart";
 
 type TrendDirection = "up" | "down" | "flat";
 
@@ -92,6 +93,7 @@ export default function HackathonDashboard({
   normalizedNameOptions,
   manualEntries,
 }: DashboardProps) {
+  const t = useTranslations("DashboardRules");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [activeProductId, setActiveProductId] = useState<string>(data.products[0]?.id ?? "");
@@ -127,35 +129,58 @@ export default function HackathonDashboard({
     return metric === "price" ? selectedProduct?.monthlyPrice ?? [] : selectedProduct?.monthlyQty ?? [];
   }, [metric, selectedProduct?.monthlyPrice, selectedProduct?.monthlyQty]);
 
-  const linePoints = useMemo(() => {
-    if (chartValues.length === 0) return [] as Array<{ x: number; y: number; value: number }>;
-    const minY = 20, maxY = 150;
-    const minValue = Math.min(...chartValues);
-    const maxValue = Math.max(...chartValues);
-    const valueRange = Math.max(maxValue - minValue, 1);
-    const spacing = 720 / Math.max(chartValues.length - 1, 1);
-    return chartValues.map((value, index) => ({
-      x: index * spacing,
-      y: maxY - ((value - minValue) / valueRange) * (maxY - minY),
-      value,
+  const chartCategory = metric === "price" ? "Preço" : "Quantidade";
+  const chartData = useMemo(() => {
+    return data.months.map((month, index) => ({
+      month,
+      [chartCategory]: chartValues[index] ?? 0,
     }));
-  }, [chartValues]);
+  }, [chartCategory, chartValues, data.months]);
 
 
   const insightText = useMemo(() => {
-    if (!selectedProduct) return "Envie notas fiscais para liberar insights de atacado.";
-    const monthQty = selectedProduct.monthlyQuantity || 0;
-    const retailUnit = selectedProduct.latestPrice || selectedProduct.monthlySpent;
-    if (!selectedSuggestion) {
-      const packQty = Math.max(6, Math.ceil(monthQty || 6));
-      const bulkUnit = retailUnit * 0.84;
-      const monthSaving = Math.max(0, (retailUnit - bulkUnit) * Math.max(monthQty, 1));
-      return `Você consome ~${monthQty.toFixed(1).replace(".", ",")} unidades/mês. Se comprar ${packQty} unidades em atacado por ${formatCurrency(bulkUnit * packQty)} (${formatCurrency(bulkUnit)}/un), pode economizar ${formatCurrency(monthSaving)}/mês ou ${formatCurrency(monthSaving * 12)}/ano.`;
+    if (!selectedProduct) {
+      return t("insightNoData");
     }
+
+    if (selectedProduct.purchaseCount <= 6) {
+      return t("insightNeedsVolume", { count: selectedProduct.purchaseCount });
+    }
+
     const monthlyQty = Math.max(1, selectedProduct.monthlyQuantity);
+    const qtyFormatted = new Intl.NumberFormat(undefined, {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    }).format(monthlyQty);
+
+    if (!selectedSuggestion) {
+      const retailUnit = selectedProduct.latestPrice || selectedProduct.monthlySpent;
+      const bulkUnit = retailUnit * 0.8;
+      const packQty = Math.max(6, Math.ceil(monthlyQty));
+      const monthlySaving = Math.max(0, (retailUnit - bulkUnit) * monthlyQty);
+
+      return t("insightWholesale", {
+        monthlyQty: qtyFormatted,
+        packQty,
+        packPrice: formatCurrency(bulkUnit * packQty),
+        bulkUnitPrice: formatCurrency(bulkUnit),
+        monthlySaving: formatCurrency(monthlySaving),
+        yearlySaving: formatCurrency(monthlySaving * 12),
+      });
+    }
+
     const monthlySaving = selectedSuggestion.savingMonthly;
-    return `Você consome ~${monthlyQty.toFixed(1).replace(".", ",")} unidades/mês. Se comprar um fardo de ${selectedSuggestion.packQuantity} unidades por ${formatCurrency(selectedSuggestion.bulkUnitPrice * selectedSuggestion.packQuantity)} (${formatCurrency(selectedSuggestion.bulkUnitPrice)}/un), você economiza ${formatCurrency(monthlySaving)}/mês ou ${formatCurrency(monthlySaving * 12)}/ano.`;
-  }, [selectedProduct, selectedSuggestion]);
+    return t("insightWholesale", {
+      monthlyQty: qtyFormatted,
+      packQty: selectedSuggestion.packQuantity,
+      packPrice: formatCurrency(
+        selectedSuggestion.bulkUnitPrice * selectedSuggestion.packQuantity
+      ),
+      bulkUnitPrice: formatCurrency(selectedSuggestion.bulkUnitPrice),
+      monthlySaving: formatCurrency(monthlySaving),
+      yearlySaving: formatCurrency(monthlySaving * 12),
+    });
+  }, [selectedProduct, selectedSuggestion, t]);
 
   const startAI = () => {
     setAiState("processing");
@@ -296,39 +321,26 @@ export default function HackathonDashboard({
             </div>
           </div>
 
-          <div className="my-3.5 h-[170px]">
-            <svg viewBox="0 0 760 170" preserveAspectRatio="none" className="h-full w-full">
-              <defs>
-                <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stopColor="#007aff" /><stop offset="100%" stopColor="#34c759" /></linearGradient>
-                <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#007aff" stopOpacity="0.1" /><stop offset="100%" stopColor="#007aff" stopOpacity="0" /></linearGradient>
-              </defs>
-              {[34, 68, 102, 136].map((y) => <line key={y} x1="0" y1={y} x2="760" y2={y} stroke="rgba(0,0,0,0.045)" strokeWidth="1" />)}
-              {linePoints.length > 1 && (
-                <>
-                  <path d={`M${linePoints.map((p) => `${p.x + 20},${p.y}`).join(" L")} L${linePoints[linePoints.length - 1].x + 20},150 L${linePoints[0].x + 20},150 Z`} fill="url(#ag)" />
-                  <polyline fill="none" stroke="url(#lg)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" points={linePoints.map((p) => `${p.x + 20},${p.y}`).join(" ")} />
-                </>
-              )}
-              {linePoints.map((point, i) => {
-                const isLast = i === linePoints.length - 1;
-                return (
-                  <g key={i}>
-                    {isLast && <circle cx={point.x + 20} cy={point.y} r={10} fill="rgba(52,199,89,0.16)" />}
-                    <circle cx={point.x + 20} cy={point.y} r={isLast ? 5.5 : 4} fill={isLast ? "#34c759" : "#007aff"} />
-                    {isLast && (
-                      <>
-                        <rect x={point.x + 20 - 38} y={point.y - 24} width={76} height={21} rx={8} fill="rgba(28,28,30,0.82)" />
-                        <text x={point.x + 20} y={point.y - 10} fill="#fff" fontSize="12" fontWeight="700" textAnchor="middle">{formatCurrency(point.value)}</text>
-                      </>
-                    )}
-                  </g>
-                );
-              })}
-              {data.months.map((label, i) => {
-                const x = (720 / Math.max(data.months.length - 1, 1)) * i + 20;
-                return <text key={label} x={x} y={165} fill="rgba(28,28,30,0.3)" fontSize="11" textAnchor="middle">{label}</text>;
-              })}
-            </svg>
+          <div className="my-3.5">
+            <AreaChart
+              className="h-[210px]"
+              data={chartData}
+              index="month"
+              categories={[chartCategory]}
+              colors={["blue"]}
+              showLegend={false}
+              showGridLines
+              showTooltip
+              showXAxis
+              showYAxis
+              yAxisWidth={48}
+              fill="gradient"
+              valueFormatter={(value) =>
+                metric === "price"
+                  ? formatCurrency(value)
+                  : `${value.toFixed(1).replace(".", ",")} un`
+              }
+            />
           </div>
 
           <div className="flex flex-wrap gap-5 border-t border-[rgba(0,0,0,0.07)] pt-3.5">

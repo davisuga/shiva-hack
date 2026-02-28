@@ -39,6 +39,12 @@
     "preferencesTitle": "Preferences",
     "preferencesDescription": "Additional settings will be available here."
   },
+  "DashboardRules": {
+    "bulkCardDescription": "Bought {count}x - consider wholesale instead of retail (-20%)",
+    "insightNoData": "Upload receipts to unlock wholesale insights.",
+    "insightNeedsVolume": "Bought {count}x so far. We recommend wholesale vs retail after more than 6 purchases.",
+    "insightWholesale": "You consume around {monthlyQty} units/month. If you buy a {packQty}-unit wholesale pack instead of retail for {packPrice} ({bulkUnitPrice}/unit), you can save {monthlySaving}/month or {yearlySaving}/year."
+  },
   "AuthLayout": {
     "headline": "Turn receipts into purchasing intelligence",
     "subtitle": "Stop losing money with retail-only purchases. Upload receipts and discover what should be bought in bulk.",

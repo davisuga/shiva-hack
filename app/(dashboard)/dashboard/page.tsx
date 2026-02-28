@@ -1,5 +1,6 @@
 import { getReceipts, getReceiptStats } from "@/lib/actions/receipts";
 import { getNormalizedNameOptions, getProductGroups } from "@/lib/actions/items";
+import { getTranslations } from "next-intl/server";
 import HackathonDashboard, { type DashboardViewData, type ProductCardData, type SuggestionData, type WeeklySpendData } from "./hackathon-dashboard";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -13,6 +14,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export default async function DashboardPage() {
+  const t = await getTranslations("DashboardRules");
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
   const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
@@ -68,7 +70,7 @@ export default async function DashboardPage() {
   });
 
   const suggestions: SuggestionData[] = products
-    .filter((p) => p.purchaseCount >= 2 && p.latestPrice > 0)
+    .filter((p) => p.purchaseCount > 6 && p.latestPrice > 0)
     .slice(0, 5)
     .map((p) => {
       const bulkDiscount = 0.8;
@@ -79,7 +81,7 @@ export default async function DashboardPage() {
         id: `sug-${p.id}`,
         productId: p.id,
         title: p.name,
-        description: `Comprado ${p.purchaseCount}x — candidato a atacado`,
+        description: t("bulkCardDescription", { count: p.purchaseCount }),
         savingMonthly: Math.max(0, savingMonthly),
         currentUnitPrice: p.latestPrice,
         bulkUnitPrice,

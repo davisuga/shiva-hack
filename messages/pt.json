@@ -39,6 +39,12 @@
     "preferencesTitle": "Preferências",
     "preferencesDescription": "Configurações adicionais estarão disponíveis aqui."
   },
+  "DashboardRules": {
+    "bulkCardDescription": "Comprado {count}x - sugerir atacado em vez de varejo (-20%)",
+    "insightNoData": "Envie notas fiscais para liberar insights de atacado.",
+    "insightNeedsVolume": "Comprado {count}x até agora. Recomendamos atacado vs varejo após mais de 6 compras.",
+    "insightWholesale": "Você consome cerca de {monthlyQty} unidades/mês. Se comprar um pacote de {packQty} unidades no atacado em vez do varejo por {packPrice} ({bulkUnitPrice}/un), pode economizar {monthlySaving}/mês ou {yearlySaving}/ano."
+  },
   "AuthLayout": {
     "headline": "Transforme notas fiscais em inteligência de compras",
     "subtitle": "Pare de perder dinheiro comprando no varejo. Envie seus recibos e descubra quais produtos deveria comprar em quantidade.",
