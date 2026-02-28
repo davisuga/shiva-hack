@@ -42,7 +42,15 @@ model Receipt {
 
  
 }
+enum ItemUnit {
+  MILLILITER
+  LITER
+  KILOGRAM
+  UNIT
+  GRAM
 
+
+}
 model Item {
   id             String  @id @default(uuid())
   receiptId      String
@@ -52,9 +60,10 @@ model Item {
   normalizedName String
   category       String // Ex: "Laticínios", "Limpeza" (Dado pela IA)
   quantity       Float
+  unit           ItemUnit
   unitPrice      Float
   totalPrice     Float // quantity * unitPrice
-
+  
  
 }
 
