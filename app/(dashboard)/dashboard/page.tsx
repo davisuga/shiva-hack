@@ -1,5 +1,6 @@
 import { getReceipts, getReceiptStats } from "@/lib/actions/receipts";
 import { getNormalizedNameOptions, getProductGroups } from "@/lib/actions/items";
+import { normalizeItemUnit, type ItemUnit } from "@/lib/item-units";
 import { getTranslations } from "next-intl/server";
 import HackathonDashboard, { type DashboardViewData, type ProductCardData, type SuggestionData, type WeeklySpendData } from "./hackathon-dashboard";
 
@@ -41,7 +42,11 @@ export default async function DashboardPage() {
   const products: ProductCardData[] = productGroups.groups.map((g, idx) => {
     const color = CATEGORY_COLORS[g.category] || "#007aff";
     const itemsForProduct = receipts.flatMap((r) =>
-      r.items.filter((item) => item.normalizedName === g.normalizedName)
+      r.items.filter(
+        (item) =>
+          item.normalizedName === g.normalizedName &&
+          normalizeItemUnit(item.unit) === g.unit
+      )
     );
 
     const monthlyPrices = buildMonthlyValues(itemsForProduct, receipts, now, "price");
@@ -66,6 +71,7 @@ export default async function DashboardPage() {
       monthlyQuantity: g.totalQuantity,
       monthlySpent: g.totalSpent,
       purchaseCount: g.purchaseCount,
+      unit: g.unit,
     };
   });
 
@@ -109,6 +115,7 @@ export default async function DashboardPage() {
       normalizedName: item.normalizedName,
       category: item.category,
       quantity: item.quantity,
+      unit: normalizeItemUnit(item.unit),
       unitPrice: item.unitPrice,
       totalPrice: item.totalPrice,
     })),
@@ -149,7 +156,12 @@ function buildWeeklySpend(
   return weeks;
 }
 
-type ItemLike = { unitPrice: number; quantity: number; receiptId: string };
+type ItemLike = {
+  unitPrice: number;
+  quantity: number;
+  receiptId: string;
+  unit: ItemUnit;
+};
 type ReceiptLike = { id: string; date: Date };
 
 function buildMonthlyValues(

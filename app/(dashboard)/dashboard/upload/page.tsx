@@ -1,6 +1,7 @@
 import { ReceiptMagicUpload } from "@/components/receipt-magic-upload";
 import { getNormalizedNameOptions } from "@/lib/actions/items";
 import { getReceipts } from "@/lib/actions/receipts";
+import { normalizeItemUnit } from "@/lib/item-units";
 import { getTranslations } from "next-intl/server";
 
 export default async function UploadPage() {
@@ -21,6 +22,7 @@ export default async function UploadPage() {
       normalizedName: item.normalizedName,
       category: item.category,
       quantity: item.quantity,
+      unit: normalizeItemUnit(item.unit),
       unitPrice: item.unitPrice,
       totalPrice: item.totalPrice,
     })),

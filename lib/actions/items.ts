@@ -2,6 +2,7 @@
 
 import { requireUserId } from "@/lib/auth-server";
 import { prisma } from "@/lib/db";
+import { DEFAULT_ITEM_UNIT, type ItemUnit } from "@/lib/item-units";
 import { revalidatePath } from "next/cache";
 
 export type CreateItemInput = {
@@ -10,6 +11,7 @@ export type CreateItemInput = {
   normalizedName: string;
   category: string;
   quantity: number;
+  unit: ItemUnit;
   unitPrice: number;
   totalPrice: number;
 };
@@ -19,6 +21,7 @@ export type UpdateItemInput = {
   normalizedName?: string;
   category?: string;
   quantity?: number;
+  unit?: ItemUnit;
   unitPrice?: number;
   totalPrice?: number;
 };
@@ -176,38 +179,79 @@ export async function getProductGroups(options?: {
     },
   };
 
-  const groupedItems = await prisma.item.groupBy({
-    by: ["normalizedName", "category"],
-    where,
-    _sum: {
-      quantity: true,
-      totalPrice: true,
-    },
-    _avg: {
-      unitPrice: true,
-    },
-    _count: {
-      id: true,
-    },
-    orderBy: {
+  try {
+    const groupedItems = await prisma.item.groupBy({
+      by: ["normalizedName", "category", "unit"],
+      where,
       _sum: {
-        totalPrice: "desc",
+        quantity: true,
+        totalPrice: true,
       },
-    },
-    take: options?.limit,
-  });
+      _avg: {
+        unitPrice: true,
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _sum: {
+          totalPrice: "desc",
+        },
+      },
+      take: options?.limit,
+    });
 
-  return {
-    success: true,
-    groups: groupedItems.map((group) => ({
-      normalizedName: group.normalizedName,
-      category: group.category,
-      totalQuantity: group._sum.quantity || 0,
-      totalSpent: group._sum.totalPrice || 0,
-      averageUnitPrice: group._avg.unitPrice || 0,
-      purchaseCount: group._count.id,
-    })),
-  };
+    return {
+      success: true,
+      groups: groupedItems.map((group) => ({
+        normalizedName: group.normalizedName,
+        category: group.category,
+        unit: group.unit,
+        totalQuantity: group._sum.quantity || 0,
+        totalSpent: group._sum.totalPrice || 0,
+        averageUnitPrice: group._avg.unitPrice || 0,
+        purchaseCount: group._count.id,
+      })),
+    };
+  } catch (error) {
+    try {
+      const legacyGroupedItems = await prisma.item.groupBy({
+        by: ["normalizedName", "category"],
+        where,
+        _sum: {
+          quantity: true,
+          totalPrice: true,
+        },
+        _avg: {
+          unitPrice: true,
+        },
+        _count: {
+          id: true,
+        },
+        orderBy: {
+          _sum: {
+            totalPrice: "desc",
+          },
+        },
+        take: options?.limit,
+      });
+
+      return {
+        success: true,
+        groups: legacyGroupedItems.map((group) => ({
+          normalizedName: group.normalizedName,
+          category: group.category,
+          unit: DEFAULT_ITEM_UNIT,
+          totalQuantity: group._sum.quantity || 0,
+          totalSpent: group._sum.totalPrice || 0,
+          averageUnitPrice: group._avg.unitPrice || 0,
+          purchaseCount: group._count.id,
+        })),
+      };
+    } catch {
+      throw error;
+    }
+  }
 }
 
 export async function getNormalizedNameOptions() {

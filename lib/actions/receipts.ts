@@ -2,6 +2,11 @@
 
 import { requireUserId } from "@/lib/auth-server";
 import { prisma } from "@/lib/db";
+import {
+  DEFAULT_ITEM_UNIT,
+  isItemUnit,
+  type ItemUnit,
+} from "@/lib/item-units";
 import { revalidatePath } from "next/cache";
 
 export type CreateReceiptInput = {
@@ -14,6 +19,7 @@ export type CreateReceiptInput = {
     normalizedName: string;
     category: string;
     quantity: number;
+    unit: ItemUnit;
     unitPrice: number;
     totalPrice: number;
   }[];
@@ -126,6 +132,10 @@ export async function createManualParsedReceipt(
     const normalizedName = String((item as Record<string, unknown>).normalizedName ?? "").trim();
     const category = String((item as Record<string, unknown>).category ?? "").trim();
     const quantity = Number((item as Record<string, unknown>).quantity ?? 0);
+    const unitCandidate =
+      typeof (item as Record<string, unknown>).unit === "string"
+        ? String((item as Record<string, unknown>).unit).trim().toUpperCase()
+        : DEFAULT_ITEM_UNIT;
     const unitPrice = Number((item as Record<string, unknown>).unitPrice ?? 0);
     const totalPriceFromPayload = Number((item as Record<string, unknown>).totalPrice ?? 0);
 
@@ -135,6 +145,10 @@ export async function createManualParsedReceipt(
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
       return { status: "error", message: `Quantidade inválida para "${rawName}".` };
+    }
+
+    if (!isItemUnit(unitCandidate)) {
+      return { status: "error", message: `Unidade inválida para "${rawName}".` };
     }
 
     if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
@@ -151,6 +165,7 @@ export async function createManualParsedReceipt(
       normalizedName,
       category,
       quantity,
+      unit: unitCandidate,
       unitPrice,
       totalPrice,
     });

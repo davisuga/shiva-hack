@@ -12,6 +12,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   submitReceiptForProcessing,
+  syncReceiptProcessingStatus,
   type UploadReceiptState,
 } from "@/lib/actions/process";
 import {
@@ -20,6 +21,12 @@ import {
   type CreateManualReceiptState,
   type DeleteManualReceiptState,
 } from "@/lib/actions/receipts";
+import {
+  DEFAULT_ITEM_UNIT,
+  ITEM_UNITS,
+  normalizeItemUnit,
+  type ItemUnit,
+} from "@/lib/item-units";
 
 type ReceiptMagicUploadProps = {
   title?: string;
@@ -42,6 +49,7 @@ type ManualReceiptEntry = {
     normalizedName: string;
     category: string;
     quantity: number;
+    unit: ItemUnit;
     unitPrice: number;
     totalPrice: number;
   }>;
@@ -54,10 +62,12 @@ type ManualItemDraft = {
   normalizedSource: "existing" | "custom";
   category: string;
   quantity: string;
+  unit: ItemUnit;
   unitPrice: string;
 };
 
 const NEW_NORMALIZED_OPTION = "__new_normalized__";
+const PROCESS_STORAGE_KEY = "notia:tracked-processes";
 
 const initialUploadState: UploadReceiptState = {
   status: "idle",
@@ -71,6 +81,35 @@ const initialDeleteState: DeleteManualReceiptState = {
   status: "idle",
 };
 
+type TrackedProcess = {
+  processId: string;
+  status: string;
+  updatedAt?: string;
+  errorMessage?: string | null;
+};
+
+function loadTrackedProcessesFromStorage(): TrackedProcess[] {
+  if (typeof window === "undefined") return [];
+
+  try {
+    const raw = window.localStorage.getItem(PROCESS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as TrackedProcess[];
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter(
+        (item) =>
+          item &&
+          typeof item.processId === "string" &&
+          typeof item.status === "string"
+      )
+      .slice(0, 20);
+  } catch {
+    return [];
+  }
+}
+
 function createManualItem(defaultNormalizedName?: string): ManualItemDraft {
   return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -79,6 +118,7 @@ function createManualItem(defaultNormalizedName?: string): ManualItemDraft {
     normalizedSource: defaultNormalizedName ? "existing" : "custom",
     category: "",
     quantity: "1",
+    unit: DEFAULT_ITEM_UNIT,
     unitPrice: "",
   };
 }
@@ -141,6 +181,9 @@ export function ReceiptMagicUpload({
   const [isDragging, setIsDragging] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+  const [trackedProcesses, setTrackedProcesses] = useState<TrackedProcess[]>(
+    () => loadTrackedProcessesFromStorage()
+  );
 
   const localeTag = locale === "pt" ? "pt-BR" : "en-US";
 
@@ -176,6 +219,15 @@ export function ReceiptMagicUpload({
     () => [...manualEntries].sort((a, b) => +new Date(b.date) - +new Date(a.date)),
     [manualEntries]
   );
+  const sortedTrackedProcesses = useMemo(
+    () =>
+      [...trackedProcesses].sort((a, b) => {
+        const aTime = a.updatedAt ? +new Date(a.updatedAt) : 0;
+        const bTime = b.updatedAt ? +new Date(b.updatedAt) : 0;
+        return bTime - aTime;
+      }),
+    [trackedProcesses]
+  );
 
   const manualItemsJson = useMemo(() => {
     const payload = manualItems.map((item) => {
@@ -187,6 +239,7 @@ export function ReceiptMagicUpload({
         normalizedName: item.normalizedName.trim(),
         category: item.category.trim(),
         quantity,
+        unit: item.unit,
         unitPrice,
         totalPrice: quantity * unitPrice,
       };
@@ -259,6 +312,14 @@ export function ReceiptMagicUpload({
     router.refresh();
   }, [deleteState.status, router]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      PROCESS_STORAGE_KEY,
+      JSON.stringify(trackedProcesses.slice(0, 20))
+    );
+  }, [trackedProcesses]);
+
   const sendFile = useCallback(
     (file: File) => {
       setLocalMessage(null);
@@ -293,7 +354,11 @@ export function ReceiptMagicUpload({
   );
 
   const updateManualItem = useCallback(
-    (id: string, field: keyof Omit<ManualItemDraft, "id">, value: string) => {
+    <K extends keyof Omit<ManualItemDraft, "id">>(
+      id: string,
+      field: K,
+      value: Omit<ManualItemDraft, "id">[K]
+    ) => {
       setManualItems((prev) =>
         prev.map((item) => (item.id === id ? { ...item, [field]: value } : item))
       );
@@ -355,6 +420,7 @@ export function ReceiptMagicUpload({
             : "custom",
           category: item.category,
           quantity: String(item.quantity),
+          unit: normalizeItemUnit(item.unit),
           unitPrice: String(item.unitPrice),
         }))
       );
@@ -408,10 +474,203 @@ export function ReceiptMagicUpload({
         item.normalizedName.trim().length > 0 &&
         item.category.trim().length > 0 &&
         Number(item.quantity) > 0 &&
+        !!item.unit &&
         Number(item.unitPrice) > 0
       );
     });
   }, [manualDate, manualItems, manualTotalAmount]);
+
+  const renderUnitOptionLabel = useCallback(
+    (unit: ItemUnit) => {
+      switch (unit) {
+        case "MILLILITER":
+          return t("manualUnitOptionMILLILITER");
+        case "LITER":
+          return t("manualUnitOptionLITER");
+        case "GRAM":
+          return t("manualUnitOptionGRAM");
+        case "KILOGRAM":
+          return t("manualUnitOptionKILOGRAM");
+        case "UNIT":
+        default:
+          return t("manualUnitOptionUNIT");
+      }
+    },
+    [t]
+  );
+
+  const upsertTrackedProcess = useCallback((nextItem: TrackedProcess) => {
+    setTrackedProcesses((prev) => {
+      const existingIndex = prev.findIndex(
+        (item) => item.processId === nextItem.processId
+      );
+      if (existingIndex === -1) {
+        return [nextItem, ...prev].slice(0, 20);
+      }
+
+      const copy = [...prev];
+      copy[existingIndex] = {
+        ...copy[existingIndex],
+        ...nextItem,
+      };
+      return copy;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (uploadState.status !== "success" || !uploadState.processId) return;
+
+    const timer = setTimeout(() => {
+      upsertTrackedProcess({
+        processId: uploadState.processId!,
+        status: uploadState.processingStatus ?? "queued",
+        updatedAt: new Date().toISOString(),
+      });
+    }, 0);
+
+    return () => clearTimeout(timer);
+  }, [
+    uploadState.status,
+    uploadState.processId,
+    uploadState.processingStatus,
+    upsertTrackedProcess,
+  ]);
+
+  const activeProcessIds = useMemo(
+    () =>
+      trackedProcesses
+        .filter((item) => {
+          const status = item.status.toLowerCase();
+          return !(
+            status === "completed" ||
+            status === "done" ||
+            status === "success" ||
+            status === "succeeded" ||
+            status === "error" ||
+            status === "failed" ||
+            status === "canceled" ||
+            status === "cancelled"
+          );
+        })
+        .map((item) => item.processId),
+    [trackedProcesses]
+  );
+
+  useEffect(() => {
+    if (activeProcessIds.length === 0) return;
+
+    let canceled = false;
+
+    const poll = async () => {
+      const results = await Promise.all(
+        activeProcessIds.map((processId) =>
+          syncReceiptProcessingStatus(processId).catch(() => null)
+        )
+      );
+
+      if (canceled) return;
+
+      setTrackedProcesses((prev) =>
+        prev.map((item) => {
+          const result = results.find(
+            (candidate) =>
+              candidate &&
+              candidate.ok &&
+              candidate.processId === item.processId
+          );
+          if (!result || !result.status) return item;
+
+          return {
+            ...item,
+            status: result.status,
+            updatedAt: result.updatedAt ?? item.updatedAt,
+            errorMessage: result.errorMessage ?? null,
+          };
+        })
+      );
+    };
+
+    poll();
+    const interval = setInterval(poll, 3000);
+
+    return () => {
+      canceled = true;
+      clearInterval(interval);
+    };
+  }, [activeProcessIds]);
+
+  const renderProcessStatusLabel = useCallback(
+    (status: string) => {
+      const normalized = status.toLowerCase();
+      if (normalized === "queued") return t("scanStatusQueued");
+      if (normalized === "processing" || normalized === "running") {
+        return t("scanStatusProcessing");
+      }
+      if (
+        normalized === "completed" ||
+        normalized === "done" ||
+        normalized === "success" ||
+        normalized === "succeeded"
+      ) {
+        return t("scanStatusCompleted");
+      }
+      if (
+        normalized === "error" ||
+        normalized === "failed" ||
+        normalized === "canceled" ||
+        normalized === "cancelled"
+      ) {
+        return t("scanStatusError");
+      }
+      return t("scanStatusUnknown");
+    },
+    [t]
+  );
+
+  const processStatusClassName = useCallback((status: string) => {
+    const normalized = status.toLowerCase();
+    if (normalized === "queued") {
+      return "border-[rgba(0,122,255,0.2)] bg-[rgba(0,122,255,0.08)] text-notia-accent";
+    }
+    if (normalized === "processing" || normalized === "running") {
+      return "border-[rgba(255,149,0,0.25)] bg-[rgba(255,149,0,0.12)] text-[#c77700]";
+    }
+    if (
+      normalized === "completed" ||
+      normalized === "done" ||
+      normalized === "success" ||
+      normalized === "succeeded"
+    ) {
+      return "border-[rgba(52,199,89,0.25)] bg-notia-green-dim text-notia-green";
+    }
+    if (
+      normalized === "error" ||
+      normalized === "failed" ||
+      normalized === "canceled" ||
+      normalized === "cancelled"
+    ) {
+      return "border-[rgba(255,59,48,0.25)] bg-notia-red-dim text-notia-red";
+    }
+    return "border-[rgba(0,0,0,0.12)] bg-notia-bg text-notia-text-muted";
+  }, []);
+
+  const clearFinishedProcesses = useCallback(() => {
+    setTrackedProcesses((prev) =>
+      prev.filter((item) => {
+        const status = item.status.toLowerCase();
+        return !(
+          status === "completed" ||
+          status === "done" ||
+          status === "success" ||
+          status === "succeeded" ||
+          status === "error" ||
+          status === "failed" ||
+          status === "canceled" ||
+          status === "cancelled"
+        );
+      })
+    );
+  }, []);
 
   return (
     <div
@@ -537,6 +796,48 @@ export function ReceiptMagicUpload({
                   {uploadState.status === "success" && "✓  "}
                   {feedbackMessage}
                 </span>
+              </div>
+            )}
+
+            {sortedTrackedProcesses.length > 0 && (
+              <div className="rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-semibold text-notia-text">
+                    {t("scanProcessingTitle")}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={clearFinishedProcesses}
+                    className="text-[10px] font-semibold text-notia-text-muted underline"
+                  >
+                    {t("scanClearFinished")}
+                  </button>
+                </div>
+                <p className="mb-2 text-[10px] text-notia-text-muted">
+                  {t("scanProcessingHint")}
+                </p>
+                <div className="space-y-1.5">
+                  {sortedTrackedProcesses.slice(0, 5).map((processItem) => (
+                    <div
+                      key={processItem.processId}
+                      className="flex items-center justify-between rounded-[8px] border border-[rgba(0,0,0,0.08)] bg-white px-2.5 py-1.5"
+                    >
+                      <span className="text-[10px] text-notia-text-muted">
+                        {t("scanProcessIdLabel")}:{" "}
+                        <span className="font-mono text-[10px] text-notia-text">
+                          {processItem.processId.slice(0, 8)}
+                        </span>
+                      </span>
+                      <span
+                        className={`rounded-[6px] border px-2 py-0.5 text-[10px] font-semibold ${processStatusClassName(
+                          processItem.status
+                        )}`}
+                      >
+                        {renderProcessStatusLabel(processItem.status)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -674,7 +975,7 @@ export function ReceiptMagicUpload({
                         </button>
                       </div>
 
-                      <div className="grid grid-cols-1 gap-2 md:grid-cols-8">
+                      <div className="grid grid-cols-1 gap-2 md:grid-cols-9">
                         <input
                           type="text"
                           value={item.rawName}
@@ -752,6 +1053,21 @@ export function ReceiptMagicUpload({
                           className="rounded-[8px] border border-[rgba(0,0,0,0.12)] px-2 py-1.5 text-[12px] outline-none focus:border-[rgba(0,122,255,0.45)]"
                           required
                         />
+
+                        <select
+                          value={item.unit}
+                          onChange={(e) =>
+                            updateManualItem(item.id, "unit", normalizeItemUnit(e.target.value))
+                          }
+                          aria-label={t("manualUnit")}
+                          className="rounded-[8px] border border-[rgba(0,0,0,0.12)] px-2 py-1.5 text-[12px] outline-none focus:border-[rgba(0,122,255,0.45)]"
+                        >
+                          {ITEM_UNITS.map((unit) => (
+                            <option key={unit} value={unit}>
+                              {renderUnitOptionLabel(unit)}
+                            </option>
+                          ))}
+                        </select>
 
                         <input
                           type="number"

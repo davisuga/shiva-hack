@@ -1,9 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { ReceiptMagicUpload } from "@/components/receipt-magic-upload";
 import { AreaChart } from "@/components/AreaChart";
+import {
+  DEFAULT_ITEM_UNIT,
+  getItemUnitShortLabel,
+  type ItemUnit,
+} from "@/lib/item-units";
 
 type TrendDirection = "up" | "down" | "flat";
 
@@ -20,6 +25,7 @@ export type ProductCardData = {
   monthlyQuantity: number;
   monthlySpent: number;
   purchaseCount: number;
+  unit: ItemUnit;
 };
 
 export type SuggestionData = {
@@ -61,6 +67,7 @@ type DashboardProps = {
       normalizedName: string;
       category: string;
       quantity: number;
+      unit: ItemUnit;
       unitPrice: number;
       totalPrice: number;
     }>;
@@ -94,6 +101,7 @@ export default function HackathonDashboard({
   manualEntries,
 }: DashboardProps) {
   const t = useTranslations("DashboardRules");
+  const locale = useLocale();
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [activeProductId, setActiveProductId] = useState<string>(data.products[0]?.id ?? "");
@@ -120,6 +128,10 @@ export default function HackathonDashboard({
   }, [activeCategory, data.products, search]);
 
   const selectedProduct = data.products.find((p) => p.id === activeProductId) ?? filteredProducts[0] ?? data.products[0];
+  const selectedUnitLabel = getItemUnitShortLabel(
+    selectedProduct?.unit ?? DEFAULT_ITEM_UNIT,
+    locale
+  );
 
   const productById = useMemo(
     () => new Map(data.products.map((product) => [product.id, product])),
@@ -143,7 +155,8 @@ export default function HackathonDashboard({
     return metric === "price" ? selectedProduct?.monthlyPrice ?? [] : selectedProduct?.monthlyQty ?? [];
   }, [metric, selectedProduct?.monthlyPrice, selectedProduct?.monthlyQty]);
 
-  const chartCategory = metric === "price" ? "Preço" : "Quantidade";
+  const chartCategory =
+    metric === "price" ? "Preço" : `Quantidade (${selectedUnitLabel})`;
   const chartData = useMemo(() => {
     return data.months.map((month, index) => ({
       month,
@@ -194,166 +207,6 @@ export default function HackathonDashboard({
 
   return (
     <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
-
-      {/* ── KPI ROW ── */}
-      <div className="col-span-full">
-        <div className="grid grid-cols-1 gap-3">
-          <div className="relative overflow-hidden rounded-[20px] border border-[rgba(52,199,89,0.25)] bg-[linear-gradient(135deg,rgba(52,199,89,0.12),rgba(0,122,255,0.08))] p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
-            <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(52,199,89,0.2)_0%,transparent_68%)]" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">{t("kpiPotentialSavingsTitle")}</p>
-            <p className="mt-2 text-[clamp(24px,3vw,32px)] font-black tracking-[-1px] text-notia-green">{formatCurrency(potentialSavingsMonth)}</p>
-            <p className="text-[11px] text-notia-text-muted">{t("kpiPotentialSavingsSubtitle", { yearValue: formatCompactCurrency(potentialSavingsYear) })}</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div className="relative overflow-hidden rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-white p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
-            <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(0,122,255,0.09)_0%,transparent_68%)]" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Total gasto</p>
-            <p className="mt-2 text-[clamp(22px,3vw,28px)] font-black tracking-[-1px] text-notia-accent">{formatCurrency(data.totalSpentMonth)}</p>
-            <p className="text-[11px] text-notia-text-muted">mês atual</p>
-          </div>
-          <div className="relative overflow-hidden rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-white p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
-            <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(52,199,89,0.11)_0%,transparent_68%)]" />
-            <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Produtos cadastrados</p>
-            <p className="mt-2 text-[clamp(22px,3vw,28px)] font-black tracking-[-1px] text-notia-green">{data.uniqueProductsMonth}</p>
-            <p className="text-[11px] text-notia-text-muted">itens únicos identificados</p>
-          </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── UPLOAD — full width row ── */}
-      <div className="col-span-full">
-        <ReceiptMagicUpload
-          redirectToDashboard
-          normalizedNameOptions={normalizedNameOptions}
-          manualEntries={manualEntries}
-          manualSecondary
-        />
-      </div>
-
-      {/* ── LEFT COLUMN: Product List ── */}
-      <div className="flex flex-col gap-3.5">
-        <div className="rounded-[24px] border border-[rgba(0,0,0,0.07)] bg-white p-[20px_22px] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_3px_10px_rgba(0,0,0,0.025)]">
-          <p className="mb-3.5 text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Produtos</p>
-
-          <div className="mb-2.5 flex items-center gap-2 rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-3 py-2">
-            <span className="text-[14px] text-notia-text-muted">&#8981;</span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar produto ou categoria…"
-              className="flex-1 border-none bg-transparent text-[13px] text-notia-text outline-none placeholder:text-notia-text-muted"
-            />
-          </div>
-
-          <div className="mb-2.5 flex flex-wrap gap-1.5">
-            {categories.map((cat) => {
-              const isActive = activeCategory === cat;
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setActiveCategory(cat)}
-                  className={`rounded-[14px] px-[11px] py-1 text-[11px] font-semibold transition ${
-                    isActive
-                      ? "bg-notia-accent border-notia-accent text-white"
-                      : "border border-[rgba(0,0,0,0.07)] bg-notia-bg text-notia-text-muted hover:text-notia-text"
-                  }`}
-                >
-                  {cat === "all" ? "Todos" : cat}
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="max-h-[290px] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.1) transparent" }}>
-            {filteredProducts.length === 0 && (
-              <div className="py-7 text-center text-[13px] text-notia-text-muted">Nenhum produto encontrado</div>
-            )}
-            {filteredProducts.map((product) => {
-              const isActive = selectedProduct?.id === product.id;
-              const trendClass = product.trendDirection === "up" ? "text-notia-red" : product.trendDirection === "down" ? "text-notia-green" : "text-notia-text-muted";
-              return (
-                <button
-                  key={product.id}
-                  type="button"
-                  onClick={() => setActiveProductId(product.id)}
-                  className={`mb-px flex w-full items-center gap-[11px] rounded-[10px] border-[1.5px] px-[10px] py-[9px] text-left transition ${
-                    isActive
-                      ? "border-[rgba(0,122,255,0.14)] bg-[rgba(0,122,255,0.055)]"
-                      : "border-transparent hover:bg-[rgba(0,0,0,0.03)]"
-                  }`}
-                >
-                  <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ backgroundColor: product.color || CATEGORY_COLORS[product.category] || "#007aff" }} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] font-semibold text-notia-text">{product.name}</span>
-                    <span className="block text-[11px] text-notia-text-muted">{product.category}</span>
-                  </span>
-                  <span className="shrink-0 text-[13px] font-bold text-notia-text">{formatCurrency(product.latestPrice)}</span>
-                  <span className={`w-[38px] shrink-0 text-right text-[11px] font-bold ${trendClass}`}>{trendLabel(product.trendPct)}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* ── RIGHT COLUMN: Chart + Insight ── */}
-      <div className="flex flex-col gap-3.5">
-        <div className="rounded-[24px] border border-[rgba(0,0,0,0.07)] bg-white p-[20px_22px] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_3px_10px_rgba(0,0,0,0.025)]">
-          <div className="mb-1 flex flex-wrap items-start justify-between gap-2.5">
-            <div>
-              <p className="mb-[3px] text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Histórico do produto</p>
-              <p className="mb-[5px] text-[16px] font-extrabold tracking-[-0.4px]">{selectedProduct?.name ?? "Sem dados"}</p>
-              <span className="inline-block rounded-[6px] bg-notia-accent-dim px-2 py-0.5 text-[11px] font-bold text-notia-accent">{selectedProduct?.category ?? "-"}</span>
-            </div>
-            <div className="flex rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[3px]">
-              <button type="button" onClick={() => setMetric("price")} className={`rounded-[16px] px-[13px] py-[5px] text-[12px] font-medium transition ${metric === "price" ? "bg-white font-bold text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]" : "text-notia-text-muted"}`}>Preço</button>
-              <button type="button" onClick={() => setMetric("qty")} className={`rounded-[16px] px-[13px] py-[5px] text-[12px] font-medium transition ${metric === "qty" ? "bg-white font-bold text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]" : "text-notia-text-muted"}`}>Qtd</button>
-            </div>
-          </div>
-
-          <div className="my-3.5">
-            <AreaChart
-              className="h-[210px]"
-              data={chartData}
-              index="month"
-              categories={[chartCategory]}
-              colors={["blue"]}
-              showLegend={false}
-              showGridLines
-              showTooltip
-              showXAxis
-              showYAxis
-              yAxisWidth={96}
-              fill="gradient"
-              valueFormatter={(value) =>
-                metric === "price"
-                  ? formatCurrency(value)
-                  : `${value.toFixed(1).replace(".", ",")} un`
-              }
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-5 border-t border-[rgba(0,0,0,0.07)] pt-3.5">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Último preço</p>
-              <p className="text-[15px] font-extrabold tracking-[-0.4px]">{formatCurrency(selectedProduct?.latestPrice ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Variação 6m</p>
-              <p className={`text-[15px] font-extrabold tracking-[-0.4px] ${(selectedProduct?.trendPct ?? 0) > 0 ? "text-notia-red" : "text-notia-green"}`}>{trendLabel(selectedProduct?.trendPct ?? 0)}</p>
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Comprado</p>
-              <p className="text-[15px] font-extrabold tracking-[-0.4px]">{selectedProduct?.purchaseCount ?? 0}x / mês</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* ── AI CARD — full width, last row ── */}
       <div className="col-span-full">
         <div className="relative overflow-hidden rounded-[24px] border border-[rgba(0,122,255,0.13)] bg-[linear-gradient(145deg,rgba(0,122,255,0.048)_0%,rgba(52,199,89,0.035)_100%)] p-[20px_22px] shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
@@ -459,94 +312,100 @@ export default function HackathonDashboard({
                 </div>
               ) : (
                 <div className="flex flex-col gap-2">
-                {remainingSuggestions.map((sug) => {
-                  const isExpanded = expandedSug === sug.id;
-                  const badgeClass = sug.savingMonthly > 30 ? "bg-notia-red-dim" : sug.savingMonthly > 15 ? "bg-notia-orange-dim" : "bg-notia-green-dim";
-                  const emoji = sug.savingMonthly > 30 ? "⚠️" : sug.savingMonthly > 15 ? "💡" : "📦";
-                  const sourceProduct = productById.get(sug.productId);
-                  const purchaseCount = sourceProduct?.purchaseCount ?? 0;
-                  const avgRetail = sourceProduct?.latestPrice ?? sug.currentUnitPrice;
-                  const monthlyQty = Math.max(1, sourceProduct?.monthlyQuantity ?? sug.packQuantity);
-                  const qtyFormatted = new Intl.NumberFormat(undefined, {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  }).format(monthlyQty);
-                  const suggestionInsight = t("insightWholesale", {
-                    monthlyQty: qtyFormatted,
-                    packQty: sug.packQuantity,
-                    packPrice: formatCurrency(
-                      sug.bulkUnitPrice * sug.packQuantity
-                    ),
-                    bulkUnitPrice: formatCurrency(sug.bulkUnitPrice),
-                    monthlySaving: formatCurrency(sug.savingMonthly),
-                    yearlySaving: formatCurrency(sug.savingMonthly * 12),
-                  });
+                  {remainingSuggestions.map((sug) => {
+                    const isExpanded = expandedSug === sug.id;
+                    const badgeClass = sug.savingMonthly > 30 ? "bg-notia-red-dim" : sug.savingMonthly > 15 ? "bg-notia-orange-dim" : "bg-notia-green-dim";
+                    const emoji = sug.savingMonthly > 30 ? "⚠️" : sug.savingMonthly > 15 ? "💡" : "📦";
+                    const sourceProduct = productById.get(sug.productId);
+                    const purchaseCount = sourceProduct?.purchaseCount ?? 0;
+                    const avgRetail = sourceProduct?.latestPrice ?? sug.currentUnitPrice;
+                    const unitLabel = getItemUnitShortLabel(
+                      sourceProduct?.unit ?? DEFAULT_ITEM_UNIT,
+                      locale
+                    );
+                    const monthlyQty = Math.max(1, sourceProduct?.monthlyQuantity ?? sug.packQuantity);
+                    const qtyFormatted = new Intl.NumberFormat(undefined, {
+                      minimumFractionDigits: 1,
+                      maximumFractionDigits: 1,
+                    }).format(monthlyQty);
+                    const suggestionInsight = t("insightWholesale", {
+                      monthlyQty: qtyFormatted,
+                      unitLabel,
+                      packQty: sug.packQuantity,
+                      packPrice: formatCurrency(
+                        sug.bulkUnitPrice * sug.packQuantity
+                      ),
+                      bulkUnitPrice: formatCurrency(sug.bulkUnitPrice),
+                      monthlySaving: formatCurrency(sug.savingMonthly),
+                      yearlySaving: formatCurrency(sug.savingMonthly * 12),
+                    });
 
-                  return (
-                    <div key={sug.id} className="overflow-hidden rounded-[16px] border border-[rgba(0,0,0,0.055)] bg-[rgba(255,255,255,0.72)] transition hover:shadow-[0_3px_12px_rgba(0,0,0,0.08)]">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedSug(isExpanded ? null : sug.id)}
-                        className="flex w-full items-center gap-[11px] p-[12px_14px] text-left"
-                      >
-                        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-[14px] ${badgeClass}`}>{emoji}</div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-[13px] font-bold text-notia-text">{sug.title}</p>
-                          <p className="text-[11px] text-notia-text-muted">{sug.description}</p>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="text-[14px] font-black tracking-[-0.4px] text-notia-green">-{formatCurrency(sug.savingMonthly).replace("R$\u00a0", "R$ ")}</p>
-                          <p className="text-[10px] text-notia-text-muted">por mês</p>
-                        </div>
-                        <span className={`shrink-0 text-[12px] text-notia-text-muted transition ${isExpanded ? "rotate-180" : ""}`}>&#8964;</span>
-                      </button>
+                    return (
+                      <div key={sug.id} className="overflow-hidden rounded-[16px] border border-[rgba(0,0,0,0.055)] bg-[rgba(255,255,255,0.72)] transition hover:shadow-[0_3px_12px_rgba(0,0,0,0.08)]">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedSug(isExpanded ? null : sug.id)}
+                          className="flex w-full items-center gap-[11px] p-[12px_14px] text-left"
+                        >
+                          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px] text-[14px] ${badgeClass}`}>{emoji}</div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-[13px] font-bold text-notia-text">{sug.title}</p>
+                            <p className="text-[11px] text-notia-text-muted">{sug.description}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-[14px] font-black tracking-[-0.4px] text-notia-green">-{formatCurrency(sug.savingMonthly).replace("R$\u00a0", "R$ ")}</p>
+                            <p className="text-[10px] text-notia-text-muted">por mês</p>
+                          </div>
+                          <span className={`shrink-0 text-[12px] text-notia-text-muted transition ${isExpanded ? "rotate-180" : ""}`}>&#8964;</span>
+                        </button>
 
-                      {isExpanded && (
-                        <div className="animate-fade-up border-t border-[rgba(0,0,0,0.07)] px-3.5 pb-3.5">
-                          <div className="my-3 flex gap-2">
-                            <div className="flex-1 rounded-[10px] border border-[rgba(255,59,48,0.15)] bg-notia-red-dim p-[10px_12px] text-center">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-red">Hoje</p>
-                              <p className="text-[17px] font-black tracking-[-0.5px] text-notia-red">{formatCurrency(sug.currentUnitPrice)}</p>
-                              <p className="mt-0.5 text-[10px] text-notia-text-muted">por unidade (varejo)</p>
+                        {isExpanded && (
+                          <div className="animate-fade-up border-t border-[rgba(0,0,0,0.07)] px-3.5 pb-3.5">
+                            <div className="my-3 flex gap-2">
+                              <div className="flex-1 rounded-[10px] border border-[rgba(255,59,48,0.15)] bg-notia-red-dim p-[10px_12px] text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-red">Hoje</p>
+                                <p className="text-[17px] font-black tracking-[-0.5px] text-notia-red">{formatCurrency(sug.currentUnitPrice)}</p>
+                                <p className="mt-0.5 text-[10px] text-notia-text-muted">por unidade (varejo)</p>
+                              </div>
+                              <div className="flex items-center pt-2.5 text-[16px] text-notia-text-muted">→</div>
+                              <div className="flex-1 rounded-[10px] border border-[rgba(52,199,89,0.2)] bg-notia-green-dim p-[10px_12px] text-center">
+                                <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-green">Atacado</p>
+                                <p className="text-[17px] font-black tracking-[-0.5px] text-notia-green">{formatCurrency(sug.bulkUnitPrice)}</p>
+                                <p className="mt-0.5 text-[10px] text-notia-text-muted">por unidade (fardo {sug.packQuantity}un)</p>
+                              </div>
                             </div>
-                            <div className="flex items-center pt-2.5 text-[16px] text-notia-text-muted">→</div>
-                            <div className="flex-1 rounded-[10px] border border-[rgba(52,199,89,0.2)] bg-notia-green-dim p-[10px_12px] text-center">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-green">Atacado</p>
-                              <p className="text-[17px] font-black tracking-[-0.5px] text-notia-green">{formatCurrency(sug.bulkUnitPrice)}</p>
-                              <p className="mt-0.5 text-[10px] text-notia-text-muted">por unidade (fardo {sug.packQuantity}un)</p>
+
+                            <p className="mb-2 text-[12px] leading-relaxed text-notia-text-secondary">{suggestionInsight}</p>
+                            <p className="mb-3 rounded-[8px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-2.5 py-1.5 text-[11px] text-notia-text-muted">
+                              {t("trustSignal", {
+                                count: purchaseCount,
+                                avgRetail: formatCurrency(avgRetail),
+                                unitLabel,
+                              })}
+                            </p>
+
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => applySuggestionAction(sug.id, "plan")}
+                                className="flex flex-1 items-center justify-center gap-1 rounded-[10px] bg-notia-green border border-notia-green px-2 py-[9px] text-[12px] font-bold text-white shadow-[0_2px_6px_rgba(52,199,89,0.25)]"
+                              >
+                                &#10003; {t("actionCreatePlan")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => applySuggestionAction(sug.id, "bought")}
+                                className="rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-transparent px-3 py-[9px] text-[12px] font-semibold text-notia-text-muted hover:bg-[rgba(0,0,0,0.03)]"
+                              >
+                                {t("actionMarkBought")}
+                              </button>
                             </div>
                           </div>
-
-                          <p className="mb-2 text-[12px] leading-relaxed text-notia-text-secondary">{suggestionInsight}</p>
-                          <p className="mb-3 rounded-[8px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-2.5 py-1.5 text-[11px] text-notia-text-muted">
-                            {t("trustSignal", {
-                              count: purchaseCount,
-                              avgRetail: formatCurrency(avgRetail),
-                            })}
-                          </p>
-
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => applySuggestionAction(sug.id, "plan")}
-                              className="flex flex-1 items-center justify-center gap-1 rounded-[10px] bg-notia-green border border-notia-green px-2 py-[9px] text-[12px] font-bold text-white shadow-[0_2px_6px_rgba(52,199,89,0.25)]"
-                            >
-                              &#10003; {t("actionCreatePlan")}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => applySuggestionAction(sug.id, "bought")}
-                              className="rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-transparent px-3 py-[9px] text-[12px] font-semibold text-notia-text-muted hover:bg-[rgba(0,0,0,0.03)]"
-                            >
-                              {t("actionMarkBought")}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               )}
 
               {/* Remaining total */}
@@ -562,6 +421,170 @@ export default function HackathonDashboard({
           )}
         </div>
       </div>
+      {/* ── KPI ROW ── */}
+      <div className="col-span-full">
+        <div className="grid grid-cols-1 gap-3">
+          <div className="relative overflow-hidden rounded-[20px] border border-[rgba(52,199,89,0.25)] bg-[linear-gradient(135deg,rgba(52,199,89,0.12),rgba(0,122,255,0.08))] p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
+            <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(52,199,89,0.2)_0%,transparent_68%)]" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">{t("kpiPotentialSavingsTitle")}</p>
+            <p className="mt-2 text-[clamp(24px,3vw,32px)] font-black tracking-[-1px] text-notia-green">{formatCurrency(potentialSavingsMonth)}</p>
+            <p className="text-[11px] text-notia-text-muted">{t("kpiPotentialSavingsSubtitle", { yearValue: formatCompactCurrency(potentialSavingsYear) })}</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="relative overflow-hidden rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-white p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
+              <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(0,122,255,0.09)_0%,transparent_68%)]" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Total gasto</p>
+              <p className="mt-2 text-[clamp(22px,3vw,28px)] font-black tracking-[-1px] text-notia-accent">{formatCurrency(data.totalSpentMonth)}</p>
+              <p className="text-[11px] text-notia-text-muted">mês atual</p>
+            </div>
+            <div className="relative overflow-hidden rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-white p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
+              <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(52,199,89,0.11)_0%,transparent_68%)]" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Produtos cadastrados</p>
+              <p className="mt-2 text-[clamp(22px,3vw,28px)] font-black tracking-[-1px] text-notia-green">{data.uniqueProductsMonth}</p>
+              <p className="text-[11px] text-notia-text-muted">itens únicos identificados</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── UPLOAD — full width row ── */}
+      <div className="col-span-full">
+        <ReceiptMagicUpload
+          redirectToDashboard
+          normalizedNameOptions={normalizedNameOptions}
+          manualEntries={manualEntries}
+          manualSecondary
+        />
+      </div>
+
+      {/* ── LEFT COLUMN: Product List ── */}
+      <div className="flex flex-col gap-3.5">
+        <div className="rounded-[24px] border border-[rgba(0,0,0,0.07)] bg-white p-[20px_22px] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_3px_10px_rgba(0,0,0,0.025)]">
+          <p className="mb-3.5 text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Produtos</p>
+
+          <div className="mb-2.5 flex items-center gap-2 rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-3 py-2">
+            <span className="text-[14px] text-notia-text-muted">&#8981;</span>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar produto ou categoria…"
+              className="flex-1 border-none bg-transparent text-[13px] text-notia-text outline-none placeholder:text-notia-text-muted"
+            />
+          </div>
+
+          <div className="mb-2.5 flex flex-wrap gap-1.5">
+            {categories.map((cat) => {
+              const isActive = activeCategory === cat;
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCategory(cat)}
+                  className={`rounded-[14px] px-[11px] py-1 text-[11px] font-semibold transition ${isActive
+                      ? "bg-notia-accent border-notia-accent text-white"
+                      : "border border-[rgba(0,0,0,0.07)] bg-notia-bg text-notia-text-muted hover:text-notia-text"
+                    }`}
+                >
+                  {cat === "all" ? "Todos" : cat}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="max-h-[290px] overflow-y-auto pr-1" style={{ scrollbarWidth: "thin", scrollbarColor: "rgba(0,0,0,0.1) transparent" }}>
+            {filteredProducts.length === 0 && (
+              <div className="py-7 text-center text-[13px] text-notia-text-muted">Nenhum produto encontrado</div>
+            )}
+            {filteredProducts.map((product) => {
+              const isActive = selectedProduct?.id === product.id;
+              const trendClass = product.trendDirection === "up" ? "text-notia-red" : product.trendDirection === "down" ? "text-notia-green" : "text-notia-text-muted";
+              return (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => setActiveProductId(product.id)}
+                  className={`mb-px flex w-full items-center gap-[11px] rounded-[10px] border-[1.5px] px-[10px] py-[9px] text-left transition ${isActive
+                      ? "border-[rgba(0,122,255,0.14)] bg-[rgba(0,122,255,0.055)]"
+                      : "border-transparent hover:bg-[rgba(0,0,0,0.03)]"
+                    }`}
+                >
+                  <span className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ backgroundColor: product.color || CATEGORY_COLORS[product.category] || "#007aff" }} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-semibold text-notia-text">{product.name}</span>
+                    <span className="block text-[11px] text-notia-text-muted">
+                      {product.category} · {getItemUnitShortLabel(product.unit, locale)}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-[13px] font-bold text-notia-text">{formatCurrency(product.latestPrice)}</span>
+                  <span className={`w-[38px] shrink-0 text-right text-[11px] font-bold ${trendClass}`}>{trendLabel(product.trendPct)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ── RIGHT COLUMN: Chart + Insight ── */}
+      <div className="flex flex-col gap-3.5">
+        <div className="rounded-[24px] border border-[rgba(0,0,0,0.07)] bg-white p-[20px_22px] shadow-[0_1px_3px_rgba(0,0,0,0.04),0_3px_10px_rgba(0,0,0,0.025)]">
+          <div className="mb-1 flex flex-wrap items-start justify-between gap-2.5">
+            <div>
+              <p className="mb-[3px] text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Histórico do produto</p>
+              <p className="mb-[5px] text-[16px] font-extrabold tracking-[-0.4px]">{selectedProduct?.name ?? "Sem dados"}</p>
+              <span className="inline-block rounded-[6px] bg-notia-accent-dim px-2 py-0.5 text-[11px] font-bold text-notia-accent">
+                {selectedProduct
+                  ? `${selectedProduct.category} · ${selectedUnitLabel}`
+                  : "-"}
+              </span>
+            </div>
+            <div className="flex rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[3px]">
+              <button type="button" onClick={() => setMetric("price")} className={`rounded-[16px] px-[13px] py-[5px] text-[12px] font-medium transition ${metric === "price" ? "bg-white font-bold text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]" : "text-notia-text-muted"}`}>Preço</button>
+              <button type="button" onClick={() => setMetric("qty")} className={`rounded-[16px] px-[13px] py-[5px] text-[12px] font-medium transition ${metric === "qty" ? "bg-white font-bold text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]" : "text-notia-text-muted"}`}>Qtd</button>
+            </div>
+          </div>
+
+          <div className="my-3.5">
+            <AreaChart
+              className="h-[210px]"
+              data={chartData}
+              index="month"
+              categories={[chartCategory]}
+              colors={["blue"]}
+              showLegend={false}
+              showGridLines
+              showTooltip
+              showXAxis
+              showYAxis
+              yAxisWidth={96}
+              fill="gradient"
+              valueFormatter={(value) =>
+                metric === "price"
+                  ? formatCurrency(value)
+                  : `${value.toFixed(1).replace(".", ",")} ${selectedUnitLabel}`
+              }
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-5 border-t border-[rgba(0,0,0,0.07)] pt-3.5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Último preço</p>
+              <p className="text-[15px] font-extrabold tracking-[-0.4px]">{formatCurrency(selectedProduct?.latestPrice ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Variação 6m</p>
+              <p className={`text-[15px] font-extrabold tracking-[-0.4px] ${(selectedProduct?.trendPct ?? 0) > 0 ? "text-notia-red" : "text-notia-green"}`}>{trendLabel(selectedProduct?.trendPct ?? 0)}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Comprado</p>
+              <p className="text-[15px] font-extrabold tracking-[-0.4px]">{selectedProduct?.purchaseCount ?? 0}x / mês</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
     </div>
   );
 }
