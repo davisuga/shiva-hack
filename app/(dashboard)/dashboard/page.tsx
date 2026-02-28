@@ -1,202 +1,183 @@
 import { getReceipts, getReceiptStats } from "@/lib/actions/receipts";
-import { getProductGroups, getCategoryStats } from "@/lib/actions/items";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Receipt, TrendingUp, ShoppingCart, DollarSign, BarChart3 } from "lucide-react";
+import { getNormalizedNameOptions, getProductGroups } from "@/lib/actions/items";
+import HackathonDashboard, { type DashboardViewData, type ProductCardData, type SuggestionData, type WeeklySpendData } from "./hackathon-dashboard";
+
+const CATEGORY_COLORS: Record<string, string> = {
+  "Grãos": "#007aff",
+  "Laticínios": "#ff3b30",
+  "Bebidas": "#ff9500",
+  "Limpeza": "#34c759",
+  "Higiene": "#af52de",
+};
+
+const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export default async function DashboardPage() {
   const now = new Date();
   const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
 
-  const [statsResult, recentReceipts, topProducts, categoryStats] = await Promise.all([
+  const [statsResult, allReceipts, productGroups, normalizedNames, recentReceipts] =
+    await Promise.all([
     getReceiptStats({ startDate: firstDayOfMonth }),
-    getReceipts({ limit: 5 }),
-    getProductGroups({ limit: 5, startDate: firstDayOfMonth }),
-    getCategoryStats({ startDate: firstDayOfMonth }),
+    getReceipts({ startDate: sixMonthsAgo }),
+    getProductGroups({ startDate: sixMonthsAgo }),
+    getNormalizedNameOptions(),
+    getReceipts({ limit: 15 }),
   ]);
 
-  const stats = statsResult.stats;
-  const receipts = recentReceipts.receipts;
-  const products = topProducts.groups;
-  const categories = categoryStats.categories;
+  const receipts = allReceipts.receipts;
+
+  const months: string[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(MONTH_LABELS[d.getMonth()]);
+  }
+
+  const weekSpend: WeeklySpendData[] = buildWeeklySpend(receipts, now);
+
+  const products: ProductCardData[] = productGroups.groups.map((g, idx) => {
+    const color = CATEGORY_COLORS[g.category] || "#007aff";
+    const itemsForProduct = receipts.flatMap((r) =>
+      r.items.filter((item) => item.normalizedName === g.normalizedName)
+    );
+
+    const monthlyPrices = buildMonthlyValues(itemsForProduct, receipts, now, "price");
+    const monthlyQtys = buildMonthlyValues(itemsForProduct, receipts, now, "qty");
+
+    const prices = itemsForProduct.map((i) => i.unitPrice).filter((p) => p > 0);
+    const latestPrice = prices.length > 0 ? prices[0] : g.averageUnitPrice;
+
+    const oldestPrice = prices.length > 1 ? prices[prices.length - 1] : latestPrice;
+    const trendPct = oldestPrice > 0 ? ((latestPrice - oldestPrice) / oldestPrice) * 100 : 0;
+
+    return {
+      id: `product-${idx}`,
+      name: g.normalizedName,
+      category: g.category,
+      color,
+      latestPrice,
+      trendPct,
+      trendDirection: trendPct > 0.5 ? "up" : trendPct < -0.5 ? "down" : "flat",
+      monthlyPrice: monthlyPrices,
+      monthlyQty: monthlyQtys,
+      monthlyQuantity: g.totalQuantity,
+      monthlySpent: g.totalSpent,
+      purchaseCount: g.purchaseCount,
+    };
+  });
+
+  const suggestions: SuggestionData[] = products
+    .filter((p) => p.purchaseCount >= 2 && p.latestPrice > 0)
+    .slice(0, 5)
+    .map((p) => {
+      const bulkDiscount = 0.8;
+      const bulkUnitPrice = p.latestPrice * bulkDiscount;
+      const monthlyQty = Math.max(1, p.monthlyQuantity);
+      const savingMonthly = (p.latestPrice - bulkUnitPrice) * monthlyQty;
+      return {
+        id: `sug-${p.id}`,
+        productId: p.id,
+        title: p.name,
+        description: `Comprado ${p.purchaseCount}x — candidato a atacado`,
+        savingMonthly: Math.max(0, savingMonthly),
+        currentUnitPrice: p.latestPrice,
+        bulkUnitPrice,
+        packQuantity: Math.max(6, Math.ceil(monthlyQty)),
+      };
+    });
+
+  const data: DashboardViewData = {
+    totalSpentMonth: statsResult.stats.totalSpent,
+    uniqueProductsMonth: products.length,
+    weekSpend,
+    months,
+    products,
+    suggestions,
+  };
+
+  const manualEntries = recentReceipts.receipts.map((receipt) => ({
+    id: receipt.id,
+    date: receipt.date.toISOString(),
+    totalAmount: receipt.totalAmount,
+    currency: receipt.currency,
+    items: receipt.items.map((item) => ({
+      id: item.id,
+      rawName: item.rawName,
+      normalizedName: item.normalizedName,
+      category: item.category,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    })),
+  }));
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600 mt-2">
-          Track your spending and discover savings opportunities
-        </p>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Spent</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {stats.totalSpent.toFixed(2)}
-            </div>
-            <p className="text-xs text-muted-foreground">This month</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receipts</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.receiptCount}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Categories</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{categories.length}</div>
-            <p className="text-xs text-muted-foreground">Active categories</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Top Product</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {products[0]?.normalizedName || "N/A"}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {products[0] ? `R$ ${products[0].totalSpent.toFixed(2)}` : "No data"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Receipts</CardTitle>
-            <CardDescription>Your latest uploaded receipts</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {receipts.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <Receipt className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No receipts yet</p>
-                <p className="text-sm">Upload your first receipt to get started</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {receipts.map((receipt) => (
-                  <div
-                    key={receipt.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        {new Date(receipt.date).toLocaleDateString()}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {receipt.items.length} items
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">
-                        {receipt.currency} {receipt.totalAmount.toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Top Products</CardTitle>
-            <CardDescription>Most purchased items this month</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {products.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <ShoppingCart className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                <p>No products yet</p>
-                <p className="text-sm">Start uploading receipts to see insights</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {products.map((product, index) => (
-                  <div
-                    key={`${product.normalizedName}-${index}`}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <p className="font-medium">{product.normalizedName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {product.category} • {product.purchaseCount} purchases
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">
-                        R$ {product.totalSpent.toFixed(2)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Avg: R$ {product.averageUnitPrice.toFixed(2)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Spending by Category</CardTitle>
-          <CardDescription>Where your money goes</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {categories.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No category data yet</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {categories.map((category, index) => {
-                const percentage = ((category.totalSpent / stats.totalSpent) * 100).toFixed(1);
-                return (
-                  <div key={`${category.category}-${index}`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium">{category.category}</span>
-                      <span className="text-sm text-muted-foreground">
-                        R$ {category.totalSpent.toFixed(2)} ({percentage}%)
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-blue-600 to-purple-600 h-2 rounded-full"
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+    <HackathonDashboard
+      data={data}
+      normalizedNameOptions={normalizedNames.normalizedNames}
+      manualEntries={manualEntries}
+    />
   );
+}
+
+function buildWeeklySpend(
+  receipts: Array<{ date: Date; totalAmount: number }>,
+  now: Date
+): WeeklySpendData[] {
+  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+  const weeks: WeeklySpendData[] = [];
+
+  for (let w = 0; w < 5; w++) {
+    const start = new Date(firstDay);
+    start.setDate(start.getDate() + w * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 7);
+
+    const total = receipts
+      .filter((r) => {
+        const d = new Date(r.date);
+        return d >= start && d < end;
+      })
+      .reduce((sum, r) => sum + r.totalAmount, 0);
+
+    weeks.push({ label: `S${w + 1}`, total });
+  }
+
+  return weeks;
+}
+
+type ItemLike = { unitPrice: number; quantity: number; receiptId: string };
+type ReceiptLike = { id: string; date: Date };
+
+function buildMonthlyValues(
+  items: ItemLike[],
+  receipts: ReceiptLike[],
+  now: Date,
+  mode: "price" | "qty"
+): number[] {
+  const receiptDateMap = new Map<string, Date>();
+  for (const r of receipts) {
+    receiptDateMap.set(r.id, new Date(r.date));
+  }
+
+  const values: number[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() - i + 1, 0, 23, 59, 59);
+
+    const monthItems = items.filter((item) => {
+      const d = receiptDateMap.get(item.receiptId);
+      return d && d >= monthStart && d <= monthEnd;
+    });
+
+    if (mode === "price") {
+      const prices = monthItems.map((i) => i.unitPrice).filter((p) => p > 0);
+      values.push(prices.length > 0 ? prices.reduce((a, b) => a + b, 0) / prices.length : 0);
+    } else {
+      values.push(monthItems.reduce((sum, i) => sum + i.quantity, 0));
+    }
+  }
+
+  return values;
 }

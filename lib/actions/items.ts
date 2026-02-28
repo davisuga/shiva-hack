@@ -210,6 +210,30 @@ export async function getProductGroups(options?: {
   };
 }
 
+export async function getNormalizedNameOptions() {
+  const userId = await requireUserId();
+
+  const rows = await prisma.item.findMany({
+    where: {
+      receipt: {
+        userId,
+      },
+    },
+    select: {
+      normalizedName: true,
+    },
+    distinct: ["normalizedName"],
+    orderBy: {
+      normalizedName: "asc",
+    },
+  });
+
+  return {
+    success: true,
+    normalizedNames: rows.map((row) => row.normalizedName),
+  };
+}
+
 export async function updateItem(id: string, input: UpdateItemInput) {
   const userId = await requireUserId();
 

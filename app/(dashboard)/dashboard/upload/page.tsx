@@ -1,36 +1,43 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Upload } from "lucide-react";
-import { UploadReceiptForm } from "./upload-form";
+import { ReceiptMagicUpload } from "@/components/receipt-magic-upload";
+import { getNormalizedNameOptions } from "@/lib/actions/items";
+import { getReceipts } from "@/lib/actions/receipts";
+import { getTranslations } from "next-intl/server";
 
-export default function UploadPage() {
+export default async function UploadPage() {
+  const t = await getTranslations("UploadPage");
+  const [normalizedNameResult, receiptsResult] = await Promise.all([
+    getNormalizedNameOptions(),
+    getReceipts({ limit: 15 }),
+  ]);
+
+  const manualEntries = receiptsResult.receipts.map((receipt) => ({
+    id: receipt.id,
+    date: receipt.date.toISOString(),
+    totalAmount: receipt.totalAmount,
+    currency: receipt.currency,
+    items: receipt.items.map((item) => ({
+      id: item.id,
+      rawName: item.rawName,
+      normalizedName: item.normalizedName,
+      category: item.category,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    })),
+  }));
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-5">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Escanear Nota</h1>
-        <p className="text-gray-600 mt-2">
-          Envie a imagem e a Notia chama o backend para processar e persistir os dados.
-        </p>
+        <h1 className="text-[22px] font-extrabold tracking-[-0.6px] text-notia-text">{t("title")}</h1>
+        <p className="mt-1 text-[13px] text-notia-text-secondary">{t("subtitle")}</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Notia Scanner</CardTitle>
-          <CardDescription>
-            Server Action gateway para `POST /process`
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-6 rounded-lg border-2 border-dashed border-gray-300 p-6">
-            <div className="text-center">
-              <Upload className="mx-auto mb-3 h-12 w-12 text-gray-400" />
-              <p className="text-sm text-muted-foreground">
-                O frontend não chama o backend diretamente; o envio passa por uma server action.
-              </p>
-            </div>
-            <UploadReceiptForm />
-          </div>
-        </CardContent>
-      </Card>
+      <ReceiptMagicUpload
+        redirectToDashboard
+        normalizedNameOptions={normalizedNameResult.normalizedNames}
+        manualEntries={manualEntries}
+      />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { requireAuth } from "@/lib/auth-server";
 import { auth } from "@/lib/auth";
-import { Receipt, LogOut, Home, BarChart3, Settings, Upload } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
+import { LocaleSwitcher } from "@/components/locale-switcher";
+import { LogOut } from "lucide-react";
+import { getTranslations } from "next-intl/server";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 
@@ -12,70 +12,37 @@ export default async function DashboardLayout({
   children: React.ReactNode;
 }) {
   const session = await requireAuth();
+  const t = await getTranslations("DashboardLayout");
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-lg">
-                <Receipt className="w-6 h-6 text-white" />
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">Notia</h1>
-            </div>
-
-            <nav className="hidden md:flex items-center gap-6">
-              <Link
-                href="/dashboard"
-                className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
-              >
-                <Home className="w-4 h-4" />
-                Dashboard
-              </Link>
-              <Link
-                href="/dashboard/analytics"
-                className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
-              >
-                <BarChart3 className="w-4 h-4" />
-                Analytics
-              </Link>
-              <Link
-                href="/dashboard/upload"
-                className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
-              >
-                <Upload className="w-4 h-4" />
-                Upload
-              </Link>
-              <Link
-                href="/dashboard/settings"
-                className="flex items-center gap-2 text-gray-700 hover:text-gray-900 transition-colors"
-              >
-                <Settings className="w-4 h-4" />
-                Settings
-              </Link>
-            </nav>
-
-            <div className="flex items-center gap-4">
-              <div className="hidden sm:block">
-                <div className="text-sm text-gray-600">
-                  {session.user.name || session.user.email}
-                </div>
-              </div>
-              <SignOutButton />
-            </div>
+    <div className="min-h-screen bg-notia-bg">
+      <nav className="animate-fade-down sticky top-0 z-100 flex h-[62px] items-center justify-between px-7 backdrop-blur-2xl backdrop-saturate-200 bg-[rgba(242,242,247,0.85)] border-b border-[rgba(0,0,0,0.07)]">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-linear-to-br from-notia-accent to-notia-green text-[14px] font-black text-white shadow-[0_2px_8px_rgba(0,122,255,0.3)]">
+            N
           </div>
+          <span className="text-[18px] font-extrabold tracking-[-0.6px] text-notia-text">
+            Notia
+          </span>
         </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex items-center gap-3">
+          <LocaleSwitcher />
+          <span className="hidden text-sm text-notia-text-secondary sm:block">
+            {t("signedInAs")}: {session.user.name || session.user.email}
+          </span>
+          <SignOutButton label={t("signOut")} />
+        </div>
+      </nav>
+
+      <main className="mx-auto max-w-[1080px] px-5 py-6 pb-16 animate-fade-up-delay">
         {children}
       </main>
     </div>
   );
 }
 
-function SignOutButton() {
+function SignOutButton({ label }: { label: string }) {
   return (
     <form
       action={async () => {
@@ -86,10 +53,13 @@ function SignOutButton() {
         redirect("/sign-in");
       }}
     >
-      <Button variant="outline" size="sm" type="submit">
-        <LogOut className="w-4 h-4 mr-2" />
-        Sign Out
-      </Button>
+      <button
+        type="submit"
+        className="flex items-center gap-1.5 rounded-full border border-[rgba(0,0,0,0.07)] bg-notia-surface px-3 py-1.5 text-xs font-semibold text-notia-text-secondary shadow-[0_1px_4px_rgba(0,0,0,0.07)] transition hover:shadow-[0_2px_10px_rgba(0,0,0,0.1)]"
+      >
+        <LogOut className="h-3.5 w-3.5" />
+        {label}
+      </button>
     </form>
   );
 }

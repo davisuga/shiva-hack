@@ -1,225 +1,113 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import Image from "next/image";
-import { Loader2, X } from "lucide-react";
 import { signUp } from "@/lib/auth-client";
 import { toast } from "sonner";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+const inputClass = "w-full rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-3.5 py-2.5 text-[14px] text-notia-text outline-none transition placeholder:text-notia-text-muted focus:border-[rgba(0,122,255,0.4)] focus:shadow-[0_0_0_3px_rgba(0,122,255,0.1)] disabled:opacity-50";
+
 export default function SignUp() {
+  const t = useTranslations("AuthSignUp");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
-  const [image, setImage] = useState<File | null>(null);
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImage(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   return (
-    <Card>
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-        <CardDescription>
-          Enter your information to get started
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form
-          onSubmit={async (e) => {
-            e.preventDefault();
-            
-            if (password !== passwordConfirmation) {
-              toast.error("Passwords do not match");
-              return;
-            }
-
-            setLoading(true);
-            try {
-              await signUp.email(
-                {
-                  email,
-                  password,
-                  name: `${firstName} ${lastName}`,
-                  image: image ? await convertImageToBase64(image) : "",
-                },
-                {
-                  onSuccess: () => {
-                    toast.success("Account created successfully!");
-                    router.push("/dashboard");
-                  },
-                  onError: (ctx) => {
-                    toast.error(ctx.error.message || "Failed to create account");
-                  },
-                }
-              );
-            } finally {
-              setLoading(false);
-            }
-          }}
-        >
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="first-name">First name</Label>
-                <Input
-                  id="first-name"
-                  placeholder="Max"
-                  required
-                  onChange={(e) => setFirstName(e.target.value)}
-                  value={firstName}
-                  disabled={loading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="last-name">Last name</Label>
-                <Input
-                  id="last-name"
-                  placeholder="Robinson"
-                  required
-                  onChange={(e) => setLastName(e.target.value)}
-                  value={lastName}
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="m@example.com"
-                required
-                onChange={(e) => setEmail(e.target.value)}
-                value={email}
-                disabled={loading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                placeholder="••••••••"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password_confirmation">Confirm Password</Label>
-              <Input
-                id="password_confirmation"
-                type="password"
-                value={passwordConfirmation}
-                onChange={(e) => setPasswordConfirmation(e.target.value)}
-                autoComplete="new-password"
-                placeholder="••••••••"
-                required
-                disabled={loading}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="image">Profile Image (optional)</Label>
-              <div className="flex items-end gap-4">
-                {imagePreview && (
-                  <div className="relative w-16 h-16 rounded-lg overflow-hidden border-2 border-border">
-                    <Image
-                      src={imagePreview}
-                      alt="Profile preview"
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                )}
-                <div className="flex items-center gap-2 flex-1">
-                  <Input
-                    id="image"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageChange}
-                    disabled={loading}
-                  />
-                  {imagePreview && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        setImage(null);
-                        setImagePreview(null);
-                      }}
-                      disabled={loading}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
-              ) : (
-                "Create account"
-              )}
-            </Button>
-          </div>
-        </form>
-      </CardContent>
-      <CardFooter className="flex flex-col space-y-4">
-        <div className="text-sm text-center text-muted-foreground">
-          Already have an account?{" "}
-          <Link href="/sign-in" className="text-primary hover:underline font-medium">
-            Sign in
-          </Link>
+    <div className="animate-fade-up">
+      <div className="mb-6 flex items-center gap-2.5">
+        <div className="flex h-[30px] w-[30px] items-center justify-center rounded-[9px] bg-linear-to-br from-notia-accent to-notia-green text-[14px] font-black text-white shadow-[0_2px_8px_rgba(0,122,255,0.3)]">
+          N
         </div>
-      </CardFooter>
-    </Card>
-  );
-}
+        <span className="text-[18px] font-extrabold tracking-[-0.6px] text-notia-text">Notia</span>
+      </div>
 
-async function convertImageToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+      <h1 className="text-[24px] font-extrabold tracking-[-0.8px] text-notia-text">{t("title")}</h1>
+      <p className="mt-1 text-[13px] text-notia-text-secondary">{t("subtitle")}</p>
+
+      <form
+        className="mt-6 space-y-4"
+        onSubmit={async (e) => {
+          e.preventDefault();
+
+          if (password !== passwordConfirmation) {
+            toast.error(t("passwordMismatch"));
+            return;
+          }
+
+          setLoading(true);
+          try {
+            await signUp.email(
+              {
+                email,
+                password,
+                name: `${firstName} ${lastName}`.trim(),
+                image: "",
+              },
+              {
+                onSuccess: () => {
+                  toast.success(t("success"));
+                  router.push("/dashboard");
+                },
+                onError: (ctx) => { toast.error(ctx.error.message || t("error")); },
+              }
+            );
+          } finally {
+            setLoading(false);
+          }
+        }}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <label htmlFor="first-name" className="text-[12px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">{t("firstNameLabel")}</label>
+            <input id="first-name" placeholder={t("firstNamePlaceholder")} required value={firstName} onChange={(e) => setFirstName(e.target.value)} disabled={loading} className={inputClass} />
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="last-name" className="text-[12px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">{t("lastNameLabel")}</label>
+            <input id="last-name" placeholder={t("lastNamePlaceholder")} required value={lastName} onChange={(e) => setLastName(e.target.value)} disabled={loading} className={inputClass} />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="email" className="text-[12px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">{t("emailLabel")}</label>
+          <input id="email" type="email" placeholder={t("emailPlaceholder")} required value={email} onChange={(e) => setEmail(e.target.value)} disabled={loading} className={inputClass} />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="password" className="text-[12px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">{t("passwordLabel")}</label>
+          <input id="password" type="password" placeholder={t("passwordPlaceholder")} autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={loading} className={inputClass} />
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="password_confirmation" className="text-[12px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">{t("confirmPasswordLabel")}</label>
+          <input id="password_confirmation" type="password" placeholder={t("confirmPasswordPlaceholder")} autoComplete="new-password" required value={passwordConfirmation} onChange={(e) => setPasswordConfirmation(e.target.value)} disabled={loading} className={inputClass} />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex w-full items-center justify-center gap-2 rounded-[12px] bg-notia-accent px-4 py-3 text-[14px] font-bold text-white shadow-[0_3px_12px_rgba(0,122,255,0.32)] transition hover:-translate-y-0.5 hover:shadow-[0_5px_20px_rgba(0,122,255,0.44)] active:translate-y-0 disabled:opacity-60"
+        >
+          {loading ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+          ) : (
+            t("submit")
+          )}
+        </button>
+      </form>
+
+      <p className="mt-5 text-center text-[13px] text-notia-text-muted">
+        {t("hasAccount")}{" "}
+        <Link href="/sign-in" className="font-semibold text-notia-accent hover:underline">
+          {t("signIn")}
+        </Link>
+      </p>
+    </div>
+  );
 }
