@@ -60,7 +60,7 @@ model Item {
   normalizedName String
   category       String // Ex: "Laticínios", "Limpeza" (Dado pela IA)
   quantity       Float
-  unit           ItemUnit
+  unit           ItemUnit @default(UNIT)
   unitPrice      Float
   totalPrice     Float // quantity * unitPrice
   
