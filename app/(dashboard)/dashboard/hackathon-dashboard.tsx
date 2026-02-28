@@ -99,6 +99,7 @@ export default function HackathonDashboard({
   const [activeProductId, setActiveProductId] = useState<string>(data.products[0]?.id ?? "");
   const [metric, setMetric] = useState<"price" | "qty">("price");
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<string>>(() => new Set());
+  const [suggestionActions, setSuggestionActions] = useState<Record<string, "plan" | "bought">>({});
   const [aiState, setAiState] = useState<"idle" | "processing" | "result">("idle");
   const [procStep, setProcStep] = useState(0);
   const [procProgress, setProcProgress] = useState(0);
@@ -120,10 +121,23 @@ export default function HackathonDashboard({
 
   const selectedProduct = data.products.find((p) => p.id === activeProductId) ?? filteredProducts[0] ?? data.products[0];
 
-  const selectedSuggestion = data.suggestions.find((s) => s.productId === selectedProduct?.id);
+  const productById = useMemo(
+    () => new Map(data.products.map((product) => [product.id, product])),
+    [data.products]
+  );
 
   const remainingSuggestions = data.suggestions.filter((s) => !dismissedSuggestions.has(s.id));
   const remainingSavings = remainingSuggestions.reduce((acc, s) => acc + s.savingMonthly, 0);
+  const potentialSavingsMonth = remainingSavings;
+  const potentialSavingsYear = potentialSavingsMonth * 12;
+  const lowVolumeProducts = useMemo(
+    () =>
+      data.products
+        .filter((p) => p.purchaseCount <= 6)
+        .sort((a, b) => b.purchaseCount - a.purchaseCount)
+        .slice(0, 3),
+    [data.products]
+  );
 
   const chartValues = useMemo(() => {
     return metric === "price" ? selectedProduct?.monthlyPrice ?? [] : selectedProduct?.monthlyQty ?? [];
@@ -137,50 +151,6 @@ export default function HackathonDashboard({
     }));
   }, [chartCategory, chartValues, data.months]);
 
-
-  const insightText = useMemo(() => {
-    if (!selectedProduct) {
-      return t("insightNoData");
-    }
-
-    if (selectedProduct.purchaseCount <= 6) {
-      return t("insightNeedsVolume", { count: selectedProduct.purchaseCount });
-    }
-
-    const monthlyQty = Math.max(1, selectedProduct.monthlyQuantity);
-    const qtyFormatted = new Intl.NumberFormat(undefined, {
-      minimumFractionDigits: 1,
-      maximumFractionDigits: 1,
-    }).format(monthlyQty);
-
-    if (!selectedSuggestion) {
-      const retailUnit = selectedProduct.latestPrice || selectedProduct.monthlySpent;
-      const bulkUnit = retailUnit * 0.8;
-      const packQty = Math.max(6, Math.ceil(monthlyQty));
-      const monthlySaving = Math.max(0, (retailUnit - bulkUnit) * monthlyQty);
-
-      return t("insightWholesale", {
-        monthlyQty: qtyFormatted,
-        packQty,
-        packPrice: formatCurrency(bulkUnit * packQty),
-        bulkUnitPrice: formatCurrency(bulkUnit),
-        monthlySaving: formatCurrency(monthlySaving),
-        yearlySaving: formatCurrency(monthlySaving * 12),
-      });
-    }
-
-    const monthlySaving = selectedSuggestion.savingMonthly;
-    return t("insightWholesale", {
-      monthlyQty: qtyFormatted,
-      packQty: selectedSuggestion.packQuantity,
-      packPrice: formatCurrency(
-        selectedSuggestion.bulkUnitPrice * selectedSuggestion.packQuantity
-      ),
-      bulkUnitPrice: formatCurrency(selectedSuggestion.bulkUnitPrice),
-      monthlySaving: formatCurrency(monthlySaving),
-      yearlySaving: formatCurrency(monthlySaving * 12),
-    });
-  }, [selectedProduct, selectedSuggestion, t]);
 
   const startAI = () => {
     setAiState("processing");
@@ -202,18 +172,40 @@ export default function HackathonDashboard({
 
   const resetAI = () => {
     setDismissedSuggestions(new Set());
+    setSuggestionActions({});
     setExpandedSug(null);
     setAiState("idle");
   };
 
+  const applySuggestionAction = (suggestionId: string, action: "plan" | "bought") => {
+    setSuggestionActions((prev) => ({ ...prev, [suggestionId]: action }));
+    setDismissedSuggestions((prev) => {
+      const next = new Set(prev);
+      next.add(suggestionId);
+      return next;
+    });
+    setExpandedSug(null);
+  };
+
   const procSteps = ["Lendo histórico de compras…", "Identificando padrões de consumo…", "Comparando preços por volume…", "Calculando economia potencial…", "Gerando sugestões…"];
+  const actionValues = Object.values(suggestionActions);
+  const handledPlanCount = actionValues.filter((value) => value === "plan").length;
+  const handledBoughtCount = actionValues.filter((value) => value === "bought").length;
 
   return (
     <div className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
 
       {/* ── KPI ROW ── */}
       <div className="col-span-full">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3">
+          <div className="relative overflow-hidden rounded-[20px] border border-[rgba(52,199,89,0.25)] bg-[linear-gradient(135deg,rgba(52,199,89,0.12),rgba(0,122,255,0.08))] p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
+            <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(52,199,89,0.2)_0%,transparent_68%)]" />
+            <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">{t("kpiPotentialSavingsTitle")}</p>
+            <p className="mt-2 text-[clamp(24px,3vw,32px)] font-black tracking-[-1px] text-notia-green">{formatCurrency(potentialSavingsMonth)}</p>
+            <p className="text-[11px] text-notia-text-muted">{t("kpiPotentialSavingsSubtitle", { yearValue: formatCompactCurrency(potentialSavingsYear) })}</p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div className="relative overflow-hidden rounded-[20px] border border-[rgba(0,0,0,0.07)] bg-white p-[18px_20px] shadow-[0_1px_3px_rgba(0,0,0,0.04)] transition hover:-translate-y-0.5 hover:shadow-[0_6px_18px_rgba(0,0,0,0.08)]">
             <div className="absolute -top-5 -right-5 h-[90px] w-[90px] rounded-full bg-[radial-gradient(circle_at_100%_0%,rgba(0,122,255,0.09)_0%,transparent_68%)]" />
             <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">Total gasto</p>
@@ -226,6 +218,7 @@ export default function HackathonDashboard({
             <p className="mt-2 text-[clamp(22px,3vw,28px)] font-black tracking-[-1px] text-notia-green">{data.uniqueProductsMonth}</p>
             <p className="text-[11px] text-notia-text-muted">itens únicos identificados</p>
           </div>
+          </div>
         </div>
       </div>
 
@@ -235,6 +228,7 @@ export default function HackathonDashboard({
           redirectToDashboard
           normalizedNameOptions={normalizedNameOptions}
           manualEntries={manualEntries}
+          manualSecondary
         />
       </div>
 
@@ -333,7 +327,7 @@ export default function HackathonDashboard({
               showTooltip
               showXAxis
               showYAxis
-              yAxisWidth={48}
+              yAxisWidth={96}
               fill="gradient"
               valueFormatter={(value) =>
                 metric === "price"
@@ -426,15 +420,70 @@ export default function HackathonDashboard({
               </div>
 
               {/* Suggestion cards */}
-              <div className="flex flex-col gap-2">
-                {data.suggestions.map((sug) => {
-                  const isDismissed = dismissedSuggestions.has(sug.id);
+              {remainingSuggestions.length === 0 ? (
+                <div className="rounded-[14px] border border-[rgba(0,0,0,0.08)] bg-white p-[14px_16px]">
+                  <p className="text-[13px] font-bold text-notia-text">
+                    {data.suggestions.length === 0
+                      ? t("noRecommendationTitle")
+                      : t("allRecommendationsHandledTitle")}
+                  </p>
+                  <p className="mt-1 text-[12px] leading-relaxed text-notia-text-secondary">
+                    {data.suggestions.length === 0
+                      ? t("noRecommendationBody", { minCount: 7 })
+                      : t("allRecommendationsHandledBody")}
+                  </p>
+                  {data.suggestions.length > 0 && (
+                    <p className="mt-1 text-[11px] text-notia-text-muted">
+                      {t("allRecommendationsHandledMeta", {
+                        planCount: handledPlanCount,
+                        boughtCount: handledBoughtCount,
+                      })}
+                    </p>
+                  )}
+
+                  {data.suggestions.length === 0 && lowVolumeProducts.length > 0 && (
+                    <div className="mt-2.5 space-y-1.5">
+                      {lowVolumeProducts.map((product) => (
+                        <div
+                          key={product.id}
+                          className="flex items-center justify-between rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-2.5 py-1.5 text-[11px]"
+                        >
+                          <span className="font-semibold text-notia-text">{product.name}</span>
+                          <span className="text-notia-text-muted">
+                            {t("noRecommendationCount", { count: product.purchaseCount })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                {remainingSuggestions.map((sug) => {
                   const isExpanded = expandedSug === sug.id;
                   const badgeClass = sug.savingMonthly > 30 ? "bg-notia-red-dim" : sug.savingMonthly > 15 ? "bg-notia-orange-dim" : "bg-notia-green-dim";
                   const emoji = sug.savingMonthly > 30 ? "⚠️" : sug.savingMonthly > 15 ? "💡" : "📦";
+                  const sourceProduct = productById.get(sug.productId);
+                  const purchaseCount = sourceProduct?.purchaseCount ?? 0;
+                  const avgRetail = sourceProduct?.latestPrice ?? sug.currentUnitPrice;
+                  const monthlyQty = Math.max(1, sourceProduct?.monthlyQuantity ?? sug.packQuantity);
+                  const qtyFormatted = new Intl.NumberFormat(undefined, {
+                    minimumFractionDigits: 1,
+                    maximumFractionDigits: 1,
+                  }).format(monthlyQty);
+                  const suggestionInsight = t("insightWholesale", {
+                    monthlyQty: qtyFormatted,
+                    packQty: sug.packQuantity,
+                    packPrice: formatCurrency(
+                      sug.bulkUnitPrice * sug.packQuantity
+                    ),
+                    bulkUnitPrice: formatCurrency(sug.bulkUnitPrice),
+                    monthlySaving: formatCurrency(sug.savingMonthly),
+                    yearlySaving: formatCurrency(sug.savingMonthly * 12),
+                  });
 
                   return (
-                    <div key={sug.id} className={`overflow-hidden rounded-[16px] border border-[rgba(0,0,0,0.055)] bg-[rgba(255,255,255,0.72)] transition ${isDismissed ? "pointer-events-none opacity-40" : "hover:shadow-[0_3px_12px_rgba(0,0,0,0.08)]"}`}>
+                    <div key={sug.id} className="overflow-hidden rounded-[16px] border border-[rgba(0,0,0,0.055)] bg-[rgba(255,255,255,0.72)] transition hover:shadow-[0_3px_12px_rgba(0,0,0,0.08)]">
                       <button
                         type="button"
                         onClick={() => setExpandedSug(isExpanded ? null : sug.id)}
@@ -468,22 +517,28 @@ export default function HackathonDashboard({
                             </div>
                           </div>
 
-                          <p className="mb-3 text-[12px] leading-relaxed text-notia-text-secondary">{insightText}</p>
+                          <p className="mb-2 text-[12px] leading-relaxed text-notia-text-secondary">{suggestionInsight}</p>
+                          <p className="mb-3 rounded-[8px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-2.5 py-1.5 text-[11px] text-notia-text-muted">
+                            {t("trustSignal", {
+                              count: purchaseCount,
+                              avgRetail: formatCurrency(avgRetail),
+                            })}
+                          </p>
 
                           <div className="flex gap-2">
                             <button
                               type="button"
-                              onClick={() => { setDismissedSuggestions((s) => { const n = new Set(s); n.add(sug.id); return n; }); setExpandedSug(null); }}
+                              onClick={() => applySuggestionAction(sug.id, "plan")}
                               className="flex flex-1 items-center justify-center gap-1 rounded-[10px] bg-notia-green border border-notia-green px-2 py-[9px] text-[12px] font-bold text-white shadow-[0_2px_6px_rgba(52,199,89,0.25)]"
                             >
-                              &#10003; Vou fazer isso
+                              &#10003; {t("actionCreatePlan")}
                             </button>
                             <button
                               type="button"
-                              onClick={() => { setDismissedSuggestions((s) => { const n = new Set(s); n.add(sug.id); return n; }); setExpandedSug(null); }}
+                              onClick={() => applySuggestionAction(sug.id, "bought")}
                               className="rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-transparent px-3 py-[9px] text-[12px] font-semibold text-notia-text-muted hover:bg-[rgba(0,0,0,0.03)]"
                             >
-                              Ignorar
+                              {t("actionMarkBought")}
                             </button>
                           </div>
                         </div>
@@ -492,6 +547,7 @@ export default function HackathonDashboard({
                   );
                 })}
               </div>
+              )}
 
               {/* Remaining total */}
               <div className="mt-2.5 flex items-center justify-between border-t border-[rgba(0,0,0,0.07)] pt-2.5 text-[12px]">

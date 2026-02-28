@@ -28,6 +28,7 @@ type ReceiptMagicUploadProps = {
   className?: string;
   normalizedNameOptions?: string[];
   manualEntries?: ManualReceiptEntry[];
+  manualSecondary?: boolean;
 };
 
 type ManualReceiptEntry = {
@@ -94,6 +95,7 @@ export function ReceiptMagicUpload({
   className,
   normalizedNameOptions = [],
   manualEntries = [],
+  manualSecondary = false,
 }: ReceiptMagicUploadProps) {
   const t = useTranslations("ReceiptUpload");
   const locale = useLocale();
@@ -419,30 +421,42 @@ export function ReceiptMagicUpload({
         <p className="text-[10px] font-bold uppercase tracking-[0.7px] text-notia-text-muted">
           {t("sectionTitle")}
         </p>
-        <div className="flex rounded-[12px] border border-[rgba(0,0,0,0.08)] bg-notia-bg p-1">
+        {manualSecondary ? (
           <button
             type="button"
-            onClick={() => setEntryMode("scan")}
-            className={`rounded-[9px] px-3 py-1.5 text-[12px] font-semibold transition ${
-              entryMode === "scan"
-                ? "bg-white text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]"
-                : "text-notia-text-muted"
-            }`}
+            onClick={() =>
+              setEntryMode((prev) => (prev === "scan" ? "manual" : "scan"))
+            }
+            className="rounded-[8px] border border-[rgba(0,0,0,0.1)] bg-notia-bg px-2.5 py-1 text-[11px] font-semibold text-notia-text-muted transition hover:text-notia-text"
           >
-            {t("modeScan")}
+            {entryMode === "scan" ? t("manualFallbackAction") : t("scanPrimaryAction")}
           </button>
-          <button
-            type="button"
-            onClick={() => setEntryMode("manual")}
-            className={`rounded-[9px] px-3 py-1.5 text-[12px] font-semibold transition ${
-              entryMode === "manual"
-                ? "bg-white text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]"
-                : "text-notia-text-muted"
-            }`}
-          >
-            {t("modeManual")}
-          </button>
-        </div>
+        ) : (
+          <div className="flex rounded-[12px] border border-[rgba(0,0,0,0.08)] bg-notia-bg p-1">
+            <button
+              type="button"
+              onClick={() => setEntryMode("scan")}
+              className={`rounded-[9px] px-3 py-1.5 text-[12px] font-semibold transition ${
+                entryMode === "scan"
+                  ? "bg-white text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]"
+                  : "text-notia-text-muted"
+              }`}
+            >
+              {t("modeScan")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryMode("manual")}
+              className={`rounded-[9px] px-3 py-1.5 text-[12px] font-semibold transition ${
+                entryMode === "manual"
+                  ? "bg-white text-notia-text shadow-[0_1px_4px_rgba(0,0,0,0.09)]"
+                  : "text-notia-text-muted"
+              }`}
+            >
+              {t("modeManual")}
+            </button>
+          </div>
+        )}
       </div>
 
       {entryMode === "scan" && (
@@ -542,6 +556,19 @@ export function ReceiptMagicUpload({
             className="hidden"
             onChange={handleInputChange}
           />
+
+          {manualSecondary && (
+            <p className="w-full text-[11px] text-notia-text-muted">
+              {t("manualFallbackHint")}{" "}
+              <button
+                type="button"
+                onClick={() => setEntryMode("manual")}
+                className="font-semibold text-notia-accent underline-offset-2 hover:underline"
+              >
+                {t("modeManual")}
+              </button>
+            </p>
+          )}
         </div>
       )}
 
