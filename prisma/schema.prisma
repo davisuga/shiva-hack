@@ -1,0 +1,51 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  receipts  Receipt[]
+  createdAt DateTime  @default(now())
+}
+
+model Receipt {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  date        DateTime // Data extraída da nota
+  totalAmount Float    // Total gasto na nota
+  currency    String   @default("BRL") // Para o aspecto global (BRL, USD, EUR)
+  imageUrl    String?  // Opcional: link da foto no S3/Supabase
+  items       Item[]
+  createdAt   DateTime @default(now())
+}
+
+model Item {
+  id             String  @id @default(uuid())
+  receiptId      String
+  receipt        Receipt @relation(fields: [receiptId], references: [id])
+  
+  // O que estava escrito na nota (ex: "LEITE UHT ITALAC 1L")
+  rawName        String  
+  
+  // O pulo do gato: A IA preenche isso para agrupar (ex: "Leite Integral")
+  normalizedName String  
+  
+  category       String  // Ex: "Laticínios", "Limpeza" (Dado pela IA)
+  
+  quantity       Float
+  unitPrice      Float
+  totalPrice     Float   // quantity * unitPrice
+}
