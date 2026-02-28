@@ -557,6 +557,10 @@ export function ReceiptMagicUpload({
         .map((item) => item.processId),
     [trackedProcesses]
   );
+  const activeProcessIdsKey = useMemo(
+    () => activeProcessIds.slice().sort().join(","),
+    [activeProcessIds]
+  );
 
   useEffect(() => {
     if (activeProcessIds.length === 0) return;
@@ -571,24 +575,42 @@ export function ReceiptMagicUpload({
       if (canceled) return;
       if (!batchResult?.ok) return;
 
-      setTrackedProcesses((prev) =>
-        prev.map((item) => {
-          const result = batchResult.results.find(
-            (candidate) =>
-              candidate &&
-              candidate.ok &&
-              candidate.processId === item.processId
-          );
-          if (!result || !result.status) return item;
+      const byProcessId = new Map(
+        batchResult.results
+          .filter(
+            (candidate): candidate is { ok: true; processId: string; status: ProcessStatus; updatedAt?: string; errorMessage?: string | null } =>
+              Boolean(candidate?.ok && candidate.processId && candidate.status)
+          )
+          .map((candidate) => [candidate.processId, candidate])
+      );
+
+      setTrackedProcesses((prev) => {
+        let changed = false;
+
+        const next = prev.map((item) => {
+          const result = byProcessId.get(item.processId);
+          if (!result) return item;
+
+          const nextUpdatedAt = result.updatedAt ?? item.updatedAt;
+          const nextErrorMessage = result.errorMessage ?? null;
+          const isSame =
+            item.status === result.status &&
+            item.updatedAt === nextUpdatedAt &&
+            (item.errorMessage ?? null) === nextErrorMessage;
+
+          if (isSame) return item;
+          changed = true;
 
           return {
             ...item,
             status: result.status,
-            updatedAt: result.updatedAt ?? item.updatedAt,
-            errorMessage: result.errorMessage ?? null,
+            updatedAt: nextUpdatedAt,
+            errorMessage: nextErrorMessage,
           };
-        })
-      );
+        });
+
+        return changed ? next : prev;
+      });
     };
 
     poll();
@@ -598,7 +620,7 @@ export function ReceiptMagicUpload({
       canceled = true;
       clearInterval(interval);
     };
-  }, [activeProcessIds]);
+  }, [activeProcessIds, activeProcessIdsKey]);
 
   const renderProcessStatusLabel = useCallback(
     (status: ProcessStatus) => {
