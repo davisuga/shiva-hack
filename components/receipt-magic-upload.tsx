@@ -199,7 +199,7 @@ export function ReceiptMagicUpload({
       return localMessage;
     }
 
-    if (uploadState.status === "processado") {
+    if (uploadState.status === "success") {
       return uploadState.message ?? t("scanSuccessDefault");
     }
 
@@ -284,7 +284,7 @@ export function ReceiptMagicUpload({
   }, [isUploadPending, uploadSteps]);
 
   useEffect(() => {
-    if (uploadState.status !== "processado") return;
+    if (uploadState.status !== "success") return;
 
     const timeout = setTimeout(() => {
       if (redirectToDashboard) {
@@ -297,7 +297,7 @@ export function ReceiptMagicUpload({
   }, [uploadState.status, redirectToDashboard, router]);
 
   useEffect(() => {
-    if (manualState.status !== "processado") return;
+    if (manualState.status !== "success") return;
 
     const timeout = setTimeout(() => {
       setEditingReceiptId(null);
@@ -311,7 +311,7 @@ export function ReceiptMagicUpload({
   }, [manualState.status, redirectToDashboard, router]);
 
   useEffect(() => {
-    if (deleteState.status !== "processado") return;
+    if (deleteState.status !== "success") return;
     router.refresh();
   }, [deleteState.status, router]);
 
@@ -525,7 +525,7 @@ export function ReceiptMagicUpload({
   }, []);
 
   useEffect(() => {
-    if (uploadState.status !== "processado" || !uploadState.processId) return;
+    if (uploadState.status !== "success" || !uploadState.processId) return;
 
     const timer = setTimeout(() => {
       upsertTrackedProcess({
@@ -606,7 +606,7 @@ export function ReceiptMagicUpload({
       if (
         normalized === "completed" ||
         normalized === "done" ||
-        normalized === "processado" ||
+        normalized === "success" ||
         normalized === "succeeded"
       ) {
         return t("scanStatusCompleted");
@@ -633,7 +633,7 @@ export function ReceiptMagicUpload({
     if (
       normalized === "completed" ||
       normalized === "done" ||
-      normalized === "processado" ||
+      normalized === "success" ||
       normalized === "succeeded"
     ) {
       return "border-[rgba(52,199,89,0.25)] bg-notia-green-dim text-notia-green";
@@ -798,12 +798,12 @@ export function ReceiptMagicUpload({
                   className={`flex-1 text-[12px] ${
                     uploadState.status === "error"
                       ? "text-notia-red"
-                      : uploadState.status === "processado"
+                      : uploadState.status === "success"
                         ? "font-bold text-notia-green"
                         : "text-notia-text-secondary"
                   }`}
                 >
-                  {uploadState.status === "processado" && "✓  "}
+                  {uploadState.status === "success" && "✓  "}
                   {feedbackMessage}
                 </span>
               </div>
@@ -1062,16 +1062,7 @@ export function ReceiptMagicUpload({
                           )}
                         </div>
 
-                        <input
-                          type="text"
-                          value={item.category}
-                          onChange={(e) =>
-                            updateManualItem(item.id, "category", e.target.value)
-                          }
-                          placeholder={t("manualCategory")}
-                          className="rounded-[8px] border border-[rgba(0,0,0,0.12)] px-2 py-1.5 text-[12px] outline-none focus:border-[rgba(0,122,255,0.45)]"
-                          required
-                        />
+           
 
                         <input
                           type="number"
@@ -1150,7 +1141,7 @@ export function ReceiptMagicUpload({
             {manualState.status !== "idle" && (
               <div
                 className={`rounded-[10px] border px-3 py-2 text-[12px] ${
-                  manualState.status === "processado"
+                  manualState.status === "success"
                     ? "border-[rgba(52,199,89,0.25)] bg-notia-green-dim text-notia-green"
                     : "border-[rgba(255,59,48,0.25)] bg-notia-red-dim text-notia-red"
                 }`}
@@ -1226,7 +1217,7 @@ function isTerminalProcessStatus(status: string) {
   return (
     normalized === "completed" ||
     normalized === "done" ||
-    normalized === "processado" ||
+    normalized === "success" ||
     normalized === "succeeded" ||
     normalized === "error" ||
     normalized === "failed" ||

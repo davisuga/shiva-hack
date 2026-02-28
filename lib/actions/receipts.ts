@@ -33,13 +33,13 @@ export type UpdateReceiptInput = {
 };
 
 export type CreateManualReceiptState = {
-  status: "idle" | "processado" | "error";
+  status: "idle" | "success" | "error";
   message?: string;
   receiptId?: string;
 };
 
 export type DeleteManualReceiptState = {
-  status: "idle" | "processado" | "error";
+  status: "idle" | "success" | "error";
   message?: string;
   receiptId?: string;
 };
@@ -214,7 +214,7 @@ export async function createManualParsedReceipt(
       revalidatePath("/dashboard/upload");
 
       return {
-        status: "processado",
+        status: "success",
         receiptId: receipt.id,
         message: "Entrada atualizada com sucesso.",
       };
@@ -231,7 +231,7 @@ export async function createManualParsedReceipt(
     revalidatePath("/dashboard/upload");
 
     return {
-      status: "processado",
+      status: "success",
       receiptId: receipt.id,
       message: "Nota adicionada manualmente com sucesso.",
     };
@@ -274,7 +274,7 @@ export async function deleteManualReceiptEntry(
   revalidatePath("/dashboard/upload");
 
   return {
-    status: "processado",
+    status: "success",
     receiptId,
     message: "Entrada excluída com sucesso.",
   };

@@ -12,7 +12,7 @@ import {
 } from "@/lib/actions/process";
 
 const initialUploadReceiptState: UploadReceiptState = {
-  status: "processado",
+  status: "idle",
 };
 
 function SubmitButton() {
@@ -44,7 +44,7 @@ export function UploadReceiptForm() {
   }, [tracking?.status, state.processingStatus]);
 
   useEffect(() => {
-    if (state.status !== "processado" || !state.processId) return;
+    if (state.status !== "success" || !state.processId) return;
 
     let active = true;
     let inFlight = false;
@@ -128,11 +128,11 @@ export function UploadReceiptForm() {
 
       <SubmitButton />
 
-      {state.status === "erro" && (
+      {state.status === "error" && (
         <p className="text-sm text-red-600">{state.message}</p>
       )}
 
-      {state.status === "processado" && (
+      {state.status === "success" && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
           <p>{state.message}</p>
           {state.processId && (
@@ -180,7 +180,7 @@ function isTerminalStatus(status?: string) {
   return (
     normalized === "done" ||
     normalized === "completed" ||
-    normalized === "processado" ||
+    normalized === "success" ||
     normalized === "failed" ||
     normalized === "error" ||
     normalized === "cancelled" ||

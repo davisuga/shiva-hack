@@ -8,8 +8,14 @@ const DEFAULT_RECEIPT_PROCESSOR_BASE_URL =
   "http://shiva-hack-worker-x7xlvu-ef2c9a-216-126-235-10.traefik.me/";
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
+export enum ProcessStatus {
+  PROCESSING = "Processing",
+  PROCESSED = "Processed",
+  ERROR = "Error",
+}
+
 export type UploadReceiptState = {
-  status: "erro" | "processado" | "canceled";
+  status: ProcessStatus;
   message?: string;
   processId?: string;
   processingStatus?: string;
@@ -65,13 +71,13 @@ export async function submitReceiptForProcessing(
     await prisma.processStatus.upsert({
       where: { processId },
       update: {
-        status: "queued",
+        status: ProcessStatus.PROCESSING,
         errorMessage: null,
         updatedAt: nowIso,
       },
       create: {
         processId,
-        status: "queued",
+        status: ProcessStatus.PROCESSING,
         createdAt: nowIso,
         updatedAt: nowIso,
       },
@@ -94,7 +100,7 @@ export async function submitReceiptForProcessing(
       await prisma.processStatus.update({
         where: { processId },
         data: {
-          status: "error",
+          status: ProcessStatus.ERROR,
           errorMessage: `Processor request failed (${response.status})`,
           updatedAt: new Date().toISOString(),
         },
@@ -111,7 +117,7 @@ export async function submitReceiptForProcessing(
       status?: string;
       message?: string;
     }>(response);
-    const processingStatus = responseData?.status || "queued";
+    const processingStatus = responseData?.status || ProcessStatus.PROCESSING;
 
     await prisma.processStatus.update({
       where: {
@@ -128,7 +134,7 @@ export async function submitReceiptForProcessing(
     revalidatePath("/dashboard/upload");
 
     return {
-      status: "processado",
+      status: "success",
       processId,
       processingStatus,
       message:
@@ -207,7 +213,7 @@ export async function cancelReceiptProcessing(
   const canceled = await prisma.processStatus.update({
     where: { processId },
     data: {
-      status: "canceled",
+      status: ProcessStatus.ERROR,
       errorMessage: "Canceled by user.",
       updatedAt: new Date().toISOString(),
     },
@@ -335,15 +341,8 @@ async function safeJson<T>(response: Response): Promise<T | null> {
 function isTerminalStatus(status?: string) {
   if (!status) return false;
 
-  const normalized = status.toLowerCase();
   return (
-    normalized === "done" ||
-    normalized === "completed" ||
-    normalized === "processado" ||
-    normalized === "succeeded" ||
-    normalized === "failed" ||
-    normalized === "error" ||
-    normalized === "cancelled" ||
-    normalized === "canceled"
+    status === ProcessStatus.PROCESSED ||
+    status === ProcessStatus.ERROR
   );
 }
