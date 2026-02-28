@@ -1,21 +1,15 @@
-import {
-    betterAuth
-} from "better-auth";
-import {
-    nextCookies
-} from "better-auth/next";
-import { Pool } from "pg";
+import { betterAuth } from "better-auth";
+import { prismaAdapter } from "better-auth/adapters/prisma";
+// If your Prisma file is located elsewhere, you can change the path
+import { PrismaClient } from "./generated/prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
+const connectionString = `${process.env.DATABASE_URL}`;
 
+const adapter = new PrismaPg({ connectionString });
+
+const prisma = new PrismaClient({ adapter });
 export const auth = betterAuth({
-    emailAndPassword: {
-        enabled: true,
-        async sendResetPassword(data, request) {
-            // Send an email to the user with a link to reset their password
-        },
-    },
-    plugins: [
-        nextCookies(),
-    ],
-    /** if no database is provided, the user data will be stored in memory.
-     * Make sure to provide a database to persist user data **/
+    database: prismaAdapter(prisma, {
+        provider: "postgresql", // or "mysql", "postgresql", ...etc
+    }),
 });

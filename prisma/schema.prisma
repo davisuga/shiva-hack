@@ -12,12 +12,20 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
 model User {
-  id        String    @id @default(uuid())
-  name      String
-  email     String    @unique
-  receipts  Receipt[]
-  createdAt DateTime  @default(now())
+  id            String    @id @default(uuid())
+  name          String
+  email         String    @unique
+  receipts      Receipt[]
+  createdAt     DateTime  @default(now())
+  emailVerified Boolean   @default(false)
+  image         String?
+  updatedAt     DateTime  @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+
+  @@map("user")
 }
 
 model Receipt {
@@ -25,10 +33,12 @@ model Receipt {
   userId      String
   user        User     @relation(fields: [userId], references: [id])
   date        DateTime // Data extraída da nota
-  totalAmount Float    // Total gasto na nota
+  totalAmount Float // Total gasto na nota
   currency    String   @default("BRL") // Para o aspecto global (BRL, USD, EUR)
-  imageUrl    String?  // Opcional: link da foto no S3/Supabase
+  imageUrl    String? // Opcional: link da foto no S3/Supabase
   items       Item[]
+  processId   String?  @unique
+  process     ProcessStatus? @relation(fields: [processId], references: [process_id])
   createdAt   DateTime @default(now())
 }
 
@@ -36,16 +46,70 @@ model Item {
   id             String  @id @default(uuid())
   receiptId      String
   receipt        Receipt @relation(fields: [receiptId], references: [id])
-  
   // O que estava escrito na nota (ex: "LEITE UHT ITALAC 1L")
-  rawName        String  
-  
-  // O pulo do gato: A IA preenche isso para agrupar (ex: "Leite Integral")
-  normalizedName String  
-  
-  category       String  // Ex: "Laticínios", "Limpeza" (Dado pela IA)
-  
+  rawName        String // O pulo do gato: A IA preenche isso para agrupar (ex: "Leite Integral")
+  normalizedName String
+  category       String // Ex: "Laticínios", "Limpeza" (Dado pela IA)
   quantity       Float
   unitPrice      Float
-  totalPrice     Float   // quantity * unitPrice
+  totalPrice     Float // quantity * unitPrice
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model ProcessStatus {
+  process_id    String  @id
+  status        String
+  error_message String?
+  created_at    String
+  updated_at    String
+  receipt       Receipt?
+
+  @@map("process_status")
 }
