@@ -33,13 +33,13 @@ export type UpdateReceiptInput = {
 };
 
 export type CreateManualReceiptState = {
-  status: "idle" | "success" | "error";
+  status: "idle" | "processado" | "error";
   message?: string;
   receiptId?: string;
 };
 
 export type DeleteManualReceiptState = {
-  status: "idle" | "success" | "error";
+  status: "idle" | "processado" | "error";
   message?: string;
   receiptId?: string;
 };
@@ -214,7 +214,7 @@ export async function createManualParsedReceipt(
       revalidatePath("/dashboard/upload");
 
       return {
-        status: "success",
+        status: "processado",
         receiptId: receipt.id,
         message: "Entrada atualizada com sucesso.",
       };
@@ -231,7 +231,7 @@ export async function createManualParsedReceipt(
     revalidatePath("/dashboard/upload");
 
     return {
-      status: "success",
+      status: "processado",
       receiptId: receipt.id,
       message: "Nota adicionada manualmente com sucesso.",
     };
@@ -274,7 +274,7 @@ export async function deleteManualReceiptEntry(
   revalidatePath("/dashboard/upload");
 
   return {
-    status: "success",
+    status: "processado",
     receiptId,
     message: "Entrada excluída com sucesso.",
   };
@@ -369,8 +369,14 @@ export async function deleteReceipt(id: string) {
     return { success: false, error: "Receipt not found" };
   }
 
-  await prisma.receipt.delete({
-    where: { id },
+  await prisma.$transaction(async (tx) => {
+    await tx.item.deleteMany({
+      where: { receiptId: id },
+    });
+
+    await tx.receipt.delete({
+      where: { id },
+    });
   });
 
   revalidatePath("/dashboard");

@@ -145,8 +145,8 @@ export default function HackathonDashboard({
   const lowVolumeProducts = useMemo(
     () =>
       data.products
-        .filter((p) => p.purchaseCount <= 6)
-        .sort((a, b) => b.purchaseCount - a.purchaseCount)
+        .filter((p) => p.monthlyQuantity <= 6)
+        .sort((a, b) => b.monthlyQuantity - a.monthlyQuantity)
         .slice(0, 3),
     [data.products]
   );
@@ -303,7 +303,10 @@ export default function HackathonDashboard({
                         >
                           <span className="font-semibold text-notia-text">{product.name}</span>
                           <span className="text-notia-text-muted">
-                            {t("noRecommendationCount", { count: product.purchaseCount })}
+                            {t("noRecommendationCount", {
+                              count: Number(product.monthlyQuantity.toFixed(1)),
+                              unitLabel: getItemUnitShortLabel(product.unit, locale),
+                            })}
                           </span>
                         </div>
                       ))}
@@ -317,7 +320,7 @@ export default function HackathonDashboard({
                     const badgeClass = sug.savingMonthly > 30 ? "bg-notia-red-dim" : sug.savingMonthly > 15 ? "bg-notia-orange-dim" : "bg-notia-green-dim";
                     const emoji = sug.savingMonthly > 30 ? "⚠️" : sug.savingMonthly > 15 ? "💡" : "📦";
                     const sourceProduct = productById.get(sug.productId);
-                    const purchaseCount = sourceProduct?.purchaseCount ?? 0;
+                    const itemCount = sourceProduct?.monthlyQuantity ?? 0;
                     const avgRetail = sourceProduct?.latestPrice ?? sug.currentUnitPrice;
                     const unitLabel = getItemUnitShortLabel(
                       sourceProduct?.unit ?? DEFAULT_ITEM_UNIT,
@@ -378,7 +381,7 @@ export default function HackathonDashboard({
                             <p className="mb-2 text-[12px] leading-relaxed text-notia-text-secondary">{suggestionInsight}</p>
                             <p className="mb-3 rounded-[8px] border border-[rgba(0,0,0,0.07)] bg-notia-bg px-2.5 py-1.5 text-[11px] text-notia-text-muted">
                               {t("trustSignal", {
-                                count: purchaseCount,
+                                count: Number(itemCount.toFixed(1)),
                                 avgRetail: formatCurrency(avgRetail),
                                 unitLabel,
                               })}
@@ -577,8 +580,10 @@ export default function HackathonDashboard({
               <p className={`text-[15px] font-extrabold tracking-[-0.4px] ${(selectedProduct?.trendPct ?? 0) > 0 ? "text-notia-red" : "text-notia-green"}`}>{trendLabel(selectedProduct?.trendPct ?? 0)}</p>
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Comprado</p>
-              <p className="text-[15px] font-extrabold tracking-[-0.4px]">{selectedProduct?.purchaseCount ?? 0}x / mês</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.5px] text-notia-text-muted">Quantidade</p>
+              <p className="text-[15px] font-extrabold tracking-[-0.4px]">
+                {(selectedProduct?.monthlyQuantity ?? 0).toFixed(1).replace(".", ",")} {selectedUnitLabel}
+              </p>
             </div>
           </div>
         </div>

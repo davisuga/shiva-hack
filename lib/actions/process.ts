@@ -9,10 +9,21 @@ const DEFAULT_RECEIPT_PROCESSOR_BASE_URL =
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export type UploadReceiptState = {
-  status: "idle" | "success" | "error";
+  status: "erro" | "processado" | "canceled";
   message?: string;
   processId?: string;
   processingStatus?: string;
+};
+
+export type ProcessingStatusResult = {
+  ok: boolean;
+  processId: string;
+  status?: string;
+  errorMessage?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  source?: "worker" | "database";
+  message?: string;
 };
 
 export async function submitReceiptForProcessing(
@@ -117,7 +128,7 @@ export async function submitReceiptForProcessing(
     revalidatePath("/dashboard/upload");
 
     return {
-      status: "success",
+      status: "processado",
       processId,
       processingStatus,
       message:
@@ -150,16 +161,14 @@ export async function submitReceiptForProcessing(
 
 export async function syncReceiptProcessingStatus(
   processId: string
-): Promise<{
-  ok: boolean;
-  processId: string;
-  status?: string;
-  errorMessage?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  source?: "worker" | "database";
-  message?: string;
-}> {
+): Promise<ProcessingStatusResult> {
+  await requireUserId();
+  return getReceiptProcessingStatusFromDatabase(processId);
+}
+
+export async function cancelReceiptProcessing(
+  processId: string
+): Promise<ProcessingStatusResult> {
   await requireUserId();
 
   if (!processId) {
@@ -170,61 +179,117 @@ export async function syncReceiptProcessingStatus(
     };
   }
 
-  const baseUrl = getProcessorBaseUrl();
-  const statusUrl = `${baseUrl}/status/${encodeURIComponent(processId)}`;
+  const current = await prisma.processStatus.findUnique({
+    where: { processId },
+  });
 
-  try {
-    const response = await fetch(statusUrl, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
+  if (!current) {
+    return {
+      ok: false,
+      processId,
+      message: "Process not found.",
+    };
+  }
+
+  if (isTerminalStatus(current.status)) {
+    return {
+      ok: true,
+      processId: current.processId,
+      status: current.status,
+      errorMessage: current.errorMessage,
+      createdAt: current.createdAt,
+      updatedAt: current.updatedAt,
+      source: "database",
+      message: "Process already finalized.",
+    };
+  }
+
+  const canceled = await prisma.processStatus.update({
+    where: { processId },
+    data: {
+      status: "canceled",
+      errorMessage: "Canceled by user.",
+      updatedAt: new Date().toISOString(),
+    },
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/upload");
+
+  return {
+    ok: true,
+    processId: canceled.processId,
+    status: canceled.status,
+    errorMessage: canceled.errorMessage,
+    createdAt: canceled.createdAt,
+    updatedAt: canceled.updatedAt,
+    source: "database",
+  };
+}
+
+export async function syncReceiptProcessingStatuses(
+  processIds: string[]
+): Promise<{ ok: boolean; results: ProcessingStatusResult[] }> {
+  await requireUserId();
+
+  const uniqueProcessIds = Array.from(
+    new Set(
+      processIds
+        .filter((value): value is string => typeof value === "string")
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0)
+    )
+  ).slice(0, 20);
+
+  if (uniqueProcessIds.length === 0) {
+    return { ok: true, results: [] };
+  }
+
+  const rows = await prisma.processStatus.findMany({
+    where: {
+      processId: {
+        in: uniqueProcessIds,
       },
-      cache: "no-store",
-    });
+    },
+  });
 
-    if (response.ok) {
-      const data = await safeJson<{
-        process_id: string;
-        status: string;
-        error_message: string | null;
-        created_at: string;
-        updated_at: string;
-      }>(response);
-
-      if (data?.process_id && data?.status) {
-        await prisma.processStatus.upsert({
-          where: { processId: data.process_id },
-          update: {
-            status: data.status,
-            errorMessage: data.error_message,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          },
-          create: {
-            processId: data.process_id,
-            status: data.status,
-            errorMessage: data.error_message,
-            createdAt: data.created_at,
-            updatedAt: data.updated_at,
-          },
-        });
-
-        revalidatePath("/dashboard");
-        revalidatePath("/dashboard/upload");
-
-        return {
-          ok: true,
-          processId: data.process_id,
-          status: data.status,
-          errorMessage: data.error_message,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at,
-          source: "worker",
-        };
-      }
+  const byProcessId = new Map(rows.map((row) => [row.processId, row]));
+  const results = uniqueProcessIds.map((processId) => {
+    const row = byProcessId.get(processId);
+    if (!row) {
+      return {
+        ok: false,
+        processId,
+        message: "Process not found.",
+      } satisfies ProcessingStatusResult;
     }
-  } catch {
-    // fall back to local database status
+
+    return {
+      ok: true,
+      processId: row.processId,
+      status: row.status,
+      errorMessage: row.errorMessage,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      source: "database",
+    } satisfies ProcessingStatusResult;
+  });
+
+  return {
+    ok: true,
+    results,
+  };
+}
+
+async function getReceiptProcessingStatusFromDatabase(
+  processId: string
+): Promise<ProcessingStatusResult> {
+  if (!processId) {
+    return {
+      ok: false,
+      processId,
+      message: "Missing process_id.",
+    };
   }
 
   const localStatus = await prisma.processStatus.findUnique({
@@ -265,4 +330,20 @@ async function safeJson<T>(response: Response): Promise<T | null> {
   } catch {
     return null;
   }
+}
+
+function isTerminalStatus(status?: string) {
+  if (!status) return false;
+
+  const normalized = status.toLowerCase();
+  return (
+    normalized === "done" ||
+    normalized === "completed" ||
+    normalized === "processado" ||
+    normalized === "succeeded" ||
+    normalized === "failed" ||
+    normalized === "error" ||
+    normalized === "cancelled" ||
+    normalized === "canceled"
+  );
 }

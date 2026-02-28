@@ -5,13 +5,14 @@ import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  cancelReceiptProcessing,
   syncReceiptProcessingStatus,
   submitReceiptForProcessing,
   type UploadReceiptState,
 } from "@/lib/actions/process";
 
 const initialUploadReceiptState: UploadReceiptState = {
-  status: "idle",
+  status: "processado",
 };
 
 function SubmitButton() {
@@ -36,13 +37,14 @@ export function UploadReceiptForm() {
     source?: "worker" | "database";
   } | null>(null);
   const [isPolling, setIsPolling] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const currentStatus = useMemo(() => {
     return tracking?.status || state.processingStatus || "queued";
   }, [tracking?.status, state.processingStatus]);
 
   useEffect(() => {
-    if (state.status !== "success" || !state.processId) return;
+    if (state.status !== "processado" || !state.processId) return;
 
     let active = true;
     let inFlight = false;
@@ -88,6 +90,27 @@ export function UploadReceiptForm() {
     };
   }, [state.status, state.processId]);
 
+  const handleCancel = async () => {
+    if (!state.processId || isCancelling) return;
+    if (!window.confirm("Cancel this processing job?")) return;
+
+    setIsCancelling(true);
+    try {
+      const result = await cancelReceiptProcessing(state.processId);
+      if (!result.ok) return;
+
+      setTracking({
+        status: result.status,
+        errorMessage: result.errorMessage,
+        updatedAt: result.updatedAt,
+        source: "database",
+      });
+      setIsPolling(false);
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <form action={formAction} className="space-y-4">
       <div className="space-y-2">
@@ -105,11 +128,11 @@ export function UploadReceiptForm() {
 
       <SubmitButton />
 
-      {state.status === "error" && (
+      {state.status === "erro" && (
         <p className="text-sm text-red-600">{state.message}</p>
       )}
 
-      {state.status === "success" && (
+      {state.status === "processado" && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
           <p>{state.message}</p>
           {state.processId && (
@@ -127,9 +150,23 @@ export function UploadReceiptForm() {
             </p>
           )}
           <p className="mt-1 text-xs text-green-700">
-            {isPolling ? "polling /status..." : "status polling paused"}
+            {isPolling ? "polling database status..." : "status polling paused"}
             {tracking?.source ? ` (${tracking.source})` : ""}
           </p>
+          {state.processId && !isTerminalStatus(currentStatus) && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-2"
+              onClick={() => {
+                void handleCancel();
+              }}
+              disabled={isCancelling}
+            >
+              {isCancelling ? "Canceling..." : "Cancel"}
+            </Button>
+          )}
         </div>
       )}
     </form>
@@ -143,7 +180,7 @@ function isTerminalStatus(status?: string) {
   return (
     normalized === "done" ||
     normalized === "completed" ||
-    normalized === "success" ||
+    normalized === "processado" ||
     normalized === "failed" ||
     normalized === "error" ||
     normalized === "cancelled" ||

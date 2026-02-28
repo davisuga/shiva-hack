@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  startTransition,
   useActionState,
   useCallback,
   useEffect,
@@ -11,8 +12,9 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
+  cancelReceiptProcessing,
+  syncReceiptProcessingStatuses,
   submitReceiptForProcessing,
-  syncReceiptProcessingStatus,
   type UploadReceiptState,
 } from "@/lib/actions/process";
 import {
@@ -181,6 +183,7 @@ export function ReceiptMagicUpload({
   const [isDragging, setIsDragging] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
+  const [cancelingProcessId, setCancelingProcessId] = useState<string | null>(null);
   const [trackedProcesses, setTrackedProcesses] = useState<TrackedProcess[]>(
     () => loadTrackedProcessesFromStorage()
   );
@@ -196,7 +199,7 @@ export function ReceiptMagicUpload({
       return localMessage;
     }
 
-    if (uploadState.status === "success") {
+    if (uploadState.status === "processado") {
       return uploadState.message ?? t("scanSuccessDefault");
     }
 
@@ -275,13 +278,13 @@ export function ReceiptMagicUpload({
       if (step > uploadSteps.length - 1) {
         step = uploadSteps.length - 1;
       }
-    }, 900);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [isUploadPending, uploadSteps]);
 
   useEffect(() => {
-    if (uploadState.status !== "success") return;
+    if (uploadState.status !== "processado") return;
 
     const timeout = setTimeout(() => {
       if (redirectToDashboard) {
@@ -294,7 +297,7 @@ export function ReceiptMagicUpload({
   }, [uploadState.status, redirectToDashboard, router]);
 
   useEffect(() => {
-    if (manualState.status !== "success") return;
+    if (manualState.status !== "processado") return;
 
     const timeout = setTimeout(() => {
       setEditingReceiptId(null);
@@ -308,7 +311,7 @@ export function ReceiptMagicUpload({
   }, [manualState.status, redirectToDashboard, router]);
 
   useEffect(() => {
-    if (deleteState.status !== "success") return;
+    if (deleteState.status !== "processado") return;
     router.refresh();
   }, [deleteState.status, router]);
 
@@ -329,7 +332,9 @@ export function ReceiptMagicUpload({
       }
       const formData = new FormData();
       formData.append("receiptImage", file);
-      uploadAction(formData);
+      startTransition(() => {
+        uploadAction(formData);
+      });
     },
     [t, uploadAction]
   );
@@ -439,7 +444,9 @@ export function ReceiptMagicUpload({
       setDeletingReceiptId(receiptId);
       const formData = new FormData();
       formData.append("manualReceiptId", receiptId);
-      deleteAction(formData);
+      startTransition(() => {
+        deleteAction(formData);
+      });
     },
     [deleteAction, editingReceiptId, resetManualForm, t]
   );
@@ -518,7 +525,7 @@ export function ReceiptMagicUpload({
   }, []);
 
   useEffect(() => {
-    if (uploadState.status !== "success" || !uploadState.processId) return;
+    if (uploadState.status !== "processado" || !uploadState.processId) return;
 
     const timer = setTimeout(() => {
       upsertTrackedProcess({
@@ -539,19 +546,7 @@ export function ReceiptMagicUpload({
   const activeProcessIds = useMemo(
     () =>
       trackedProcesses
-        .filter((item) => {
-          const status = item.status.toLowerCase();
-          return !(
-            status === "completed" ||
-            status === "done" ||
-            status === "success" ||
-            status === "succeeded" ||
-            status === "error" ||
-            status === "failed" ||
-            status === "canceled" ||
-            status === "cancelled"
-          );
-        })
+        .filter((item) => !isTerminalProcessStatus(item.status))
         .map((item) => item.processId),
     [trackedProcesses]
   );
@@ -562,17 +557,16 @@ export function ReceiptMagicUpload({
     let canceled = false;
 
     const poll = async () => {
-      const results = await Promise.all(
-        activeProcessIds.map((processId) =>
-          syncReceiptProcessingStatus(processId).catch(() => null)
-        )
-      );
+      const batchResult = await syncReceiptProcessingStatuses(
+        activeProcessIds
+      ).catch(() => null);
 
       if (canceled) return;
+      if (!batchResult?.ok) return;
 
       setTrackedProcesses((prev) =>
         prev.map((item) => {
-          const result = results.find(
+          const result = batchResult.results.find(
             (candidate) =>
               candidate &&
               candidate.ok &&
@@ -606,19 +600,20 @@ export function ReceiptMagicUpload({
       if (normalized === "processing" || normalized === "running") {
         return t("scanStatusProcessing");
       }
+      if (normalized === "canceled" || normalized === "cancelled") {
+        return t("scanStatusCanceled");
+      }
       if (
         normalized === "completed" ||
         normalized === "done" ||
-        normalized === "success" ||
+        normalized === "processado" ||
         normalized === "succeeded"
       ) {
         return t("scanStatusCompleted");
       }
       if (
         normalized === "error" ||
-        normalized === "failed" ||
-        normalized === "canceled" ||
-        normalized === "cancelled"
+        normalized === "failed"
       ) {
         return t("scanStatusError");
       }
@@ -638,16 +633,17 @@ export function ReceiptMagicUpload({
     if (
       normalized === "completed" ||
       normalized === "done" ||
-      normalized === "success" ||
+      normalized === "processado" ||
       normalized === "succeeded"
     ) {
       return "border-[rgba(52,199,89,0.25)] bg-notia-green-dim text-notia-green";
     }
+    if (normalized === "canceled" || normalized === "cancelled") {
+      return "border-[rgba(0,0,0,0.12)] bg-notia-bg text-notia-text-muted";
+    }
     if (
       normalized === "error" ||
-      normalized === "failed" ||
-      normalized === "canceled" ||
-      normalized === "cancelled"
+      normalized === "failed"
     ) {
       return "border-[rgba(255,59,48,0.25)] bg-notia-red-dim text-notia-red";
     }
@@ -656,21 +652,49 @@ export function ReceiptMagicUpload({
 
   const clearFinishedProcesses = useCallback(() => {
     setTrackedProcesses((prev) =>
-      prev.filter((item) => {
-        const status = item.status.toLowerCase();
-        return !(
-          status === "completed" ||
-          status === "done" ||
-          status === "success" ||
-          status === "succeeded" ||
-          status === "error" ||
-          status === "failed" ||
-          status === "canceled" ||
-          status === "cancelled"
-        );
-      })
+      prev.filter((item) => !isTerminalProcessStatus(item.status))
     );
   }, []);
+
+  const handleCancelProcess = useCallback(
+    async (processId: string) => {
+      if (cancelingProcessId === processId) return;
+      if (!window.confirm(t("scanCancelConfirm"))) return;
+
+      setCancelingProcessId(processId);
+
+      try {
+        const result = await cancelReceiptProcessing(processId);
+
+        if (!result.ok || !result.status) {
+          setLocalMessage(result.message ?? t("scanCancelError"));
+          return;
+        }
+        const canceledStatus = result.status;
+
+        setTrackedProcesses((prev) =>
+          prev.map((item) => {
+            if (item.processId !== processId) return item;
+            return {
+              ...item,
+              status: canceledStatus,
+              updatedAt: result.updatedAt ?? new Date().toISOString(),
+              errorMessage: result.errorMessage ?? null,
+            };
+          })
+        );
+
+        setLocalMessage(t("scanCancelSuccess"));
+      } catch {
+        setLocalMessage(t("scanCancelError"));
+      } finally {
+        setCancelingProcessId((current) =>
+          current === processId ? null : current
+        );
+      }
+    },
+    [cancelingProcessId, t]
+  );
 
   return (
     <div
@@ -747,22 +771,8 @@ export function ReceiptMagicUpload({
 
           <div className="flex min-w-[200px] flex-col gap-2">
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={isUploadPending}
-                className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[11px_6px] text-[12px] font-semibold text-notia-text-secondary transition hover:bg-[rgba(0,0,0,0.055)] hover:text-notia-text active:scale-[0.97] disabled:opacity-60"
-              >
-                &#128247; {t("scanCamera")}
-              </button>
-              <button
-                type="button"
-                onClick={() => galleryInputRef.current?.click()}
-                disabled={isUploadPending}
-                className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[11px_6px] text-[12px] font-semibold text-notia-text-secondary transition hover:bg-[rgba(0,0,0,0.055)] hover:text-notia-text active:scale-[0.97] disabled:opacity-60"
-              >
-                &#128444;&#65039; {t("scanGallery")}
-              </button>
+       
+        
               <button
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
@@ -788,12 +798,12 @@ export function ReceiptMagicUpload({
                   className={`flex-1 text-[12px] ${
                     uploadState.status === "error"
                       ? "text-notia-red"
-                      : uploadState.status === "success"
+                      : uploadState.status === "processado"
                         ? "font-bold text-notia-green"
                         : "text-notia-text-secondary"
                   }`}
                 >
-                  {uploadState.status === "success" && "✓  "}
+                  {uploadState.status === "processado" && "✓  "}
                   {feedbackMessage}
                 </span>
               </div>
@@ -817,26 +827,48 @@ export function ReceiptMagicUpload({
                   {t("scanProcessingHint")}
                 </p>
                 <div className="space-y-1.5">
-                  {sortedTrackedProcesses.slice(0, 5).map((processItem) => (
-                    <div
-                      key={processItem.processId}
-                      className="flex items-center justify-between rounded-[8px] border border-[rgba(0,0,0,0.08)] bg-white px-2.5 py-1.5"
-                    >
-                      <span className="text-[10px] text-notia-text-muted">
-                        {t("scanProcessIdLabel")}:{" "}
-                        <span className="font-mono text-[10px] text-notia-text">
-                          {processItem.processId.slice(0, 8)}
-                        </span>
-                      </span>
-                      <span
-                        className={`rounded-[6px] border px-2 py-0.5 text-[10px] font-semibold ${processStatusClassName(
-                          processItem.status
-                        )}`}
+                  {sortedTrackedProcesses.slice(0, 5).map((processItem) => {
+                    const canCancel = !isTerminalProcessStatus(processItem.status);
+                    const isCancellingCurrent =
+                      cancelingProcessId === processItem.processId;
+
+                    return (
+                      <div
+                        key={processItem.processId}
+                        className="flex items-center justify-between rounded-[8px] border border-[rgba(0,0,0,0.08)] bg-white px-2.5 py-1.5"
                       >
-                        {renderProcessStatusLabel(processItem.status)}
-                      </span>
-                    </div>
-                  ))}
+                        <span className="text-[10px] text-notia-text-muted">
+                          {t("scanProcessIdLabel")}:{" "}
+                          <span className="font-mono text-[10px] text-notia-text">
+                            {processItem.processId.slice(0, 8)}
+                          </span>
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`rounded-[6px] border px-2 py-0.5 text-[10px] font-semibold ${processStatusClassName(
+                              processItem.status
+                            )}`}
+                          >
+                            {renderProcessStatusLabel(processItem.status)}
+                          </span>
+                          {canCancel && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleCancelProcess(processItem.processId);
+                              }}
+                              disabled={isCancellingCurrent}
+                              className="rounded-[6px] border border-[rgba(255,59,48,0.25)] bg-notia-red-dim px-2 py-0.5 text-[10px] font-semibold text-notia-red transition hover:bg-[rgba(255,59,48,0.2)] disabled:opacity-60"
+                            >
+                              {isCancellingCurrent
+                                ? t("scanCancelling")
+                                : t("scanCancelAction")}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -1118,7 +1150,7 @@ export function ReceiptMagicUpload({
             {manualState.status !== "idle" && (
               <div
                 className={`rounded-[10px] border px-3 py-2 text-[12px] ${
-                  manualState.status === "success"
+                  manualState.status === "processado"
                     ? "border-[rgba(52,199,89,0.25)] bg-notia-green-dim text-notia-green"
                     : "border-[rgba(255,59,48,0.25)] bg-notia-red-dim text-notia-red"
                 }`}
@@ -1186,5 +1218,19 @@ export function ReceiptMagicUpload({
         </div>
       )}
     </div>
+  );
+}
+
+function isTerminalProcessStatus(status: string) {
+  const normalized = status.toLowerCase();
+  return (
+    normalized === "completed" ||
+    normalized === "done" ||
+    normalized === "processado" ||
+    normalized === "succeeded" ||
+    normalized === "error" ||
+    normalized === "failed" ||
+    normalized === "canceled" ||
+    normalized === "cancelled"
   );
 }

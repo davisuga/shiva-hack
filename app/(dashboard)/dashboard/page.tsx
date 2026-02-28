@@ -76,7 +76,7 @@ export default async function DashboardPage() {
   });
 
   const suggestions: SuggestionData[] = products
-    .filter((p) => p.purchaseCount > 6 && p.latestPrice > 0)
+    .filter((p) => p.monthlyQuantity > 6 && p.latestPrice > 0)
     .slice(0, 5)
     .map((p) => {
       const bulkDiscount = 0.8;
@@ -87,7 +87,9 @@ export default async function DashboardPage() {
         id: `sug-${p.id}`,
         productId: p.id,
         title: p.name,
-        description: t("bulkCardDescription", { count: p.purchaseCount }),
+        description: t("bulkCardDescription", {
+          count: Number(monthlyQty.toFixed(1)),
+        }),
         savingMonthly: Math.max(0, savingMonthly),
         currentUnitPrice: p.latestPrice,
         bulkUnitPrice,

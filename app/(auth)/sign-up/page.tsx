@@ -52,7 +52,7 @@ export default function SignUp() {
               },
               {
                 onSuccess: () => {
-                  toast.success(t("success"));
+                  toast.success(t("processado"));
                   router.push("/dashboard");
                 },
                 onError: (ctx) => { toast.error(ctx.error.message || t("error")); },
