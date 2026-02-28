@@ -51,6 +51,7 @@ const initialManualState: CreateManualReceiptState = {
 const initialDeleteManualState: DeleteManualReceiptState = {
   status: "idle",
 };
+const DEFAULT_MANUAL_CATEGORY = "UNCATEGORIZED";
 
 export async function createReceipt(input: CreateReceiptInput) {
   const userId = await requireUserId();
@@ -84,16 +85,11 @@ export async function createManualParsedReceipt(
 
   const receiptIdRaw = formData.get("manualReceiptId");
   const dateRaw = formData.get("manualDate");
-  const totalAmountRaw = formData.get("manualTotalAmount");
   const currencyRaw = formData.get("manualCurrency");
   const itemsJson = formData.get("manualItemsJson");
 
   if (typeof dateRaw !== "string" || !dateRaw.trim()) {
     return { status: "error", message: "Informe a data da nota." };
-  }
-
-  if (typeof totalAmountRaw !== "string" || !totalAmountRaw.trim()) {
-    return { status: "error", message: "Informe o total da nota." };
   }
 
   if (typeof itemsJson !== "string" || !itemsJson.trim()) {
@@ -103,11 +99,6 @@ export async function createManualParsedReceipt(
   const parsedDate = new Date(dateRaw);
   if (Number.isNaN(parsedDate.getTime())) {
     return { status: "error", message: "Data inválida." };
-  }
-
-  const parsedTotalAmount = Number(totalAmountRaw);
-  if (!Number.isFinite(parsedTotalAmount) || parsedTotalAmount <= 0) {
-    return { status: "error", message: "Total inválido." };
   }
 
   let parsedItems: unknown;
@@ -137,10 +128,8 @@ export async function createManualParsedReceipt(
         ? String((item as Record<string, unknown>).unit).trim().toUpperCase()
         : DEFAULT_ITEM_UNIT;
     const unitPrice = Number((item as Record<string, unknown>).unitPrice ?? 0);
-    const totalPriceFromPayload = Number((item as Record<string, unknown>).totalPrice ?? 0);
-
-    if (!rawName || !normalizedName || !category) {
-      return { status: "error", message: "Preencha nome, nome normalizado e categoria dos itens." };
+    if (!rawName || !normalizedName) {
+      return { status: "error", message: "Preencha nome e nome normalizado dos itens." };
     }
 
     if (!Number.isFinite(quantity) || quantity <= 0) {
@@ -155,20 +144,27 @@ export async function createManualParsedReceipt(
       return { status: "error", message: `Preço unitário inválido para "${rawName}".` };
     }
 
-    const totalPrice =
-      Number.isFinite(totalPriceFromPayload) && totalPriceFromPayload > 0
-        ? totalPriceFromPayload
-        : quantity * unitPrice;
+    const totalPrice = Number((quantity * unitPrice).toFixed(2));
 
     sanitizedItems.push({
       rawName,
       normalizedName,
-      category,
+      category: category || DEFAULT_MANUAL_CATEGORY,
       quantity,
       unit: unitCandidate,
       unitPrice,
       totalPrice,
     });
+  }
+
+  const parsedTotalAmount = Number(
+    sanitizedItems
+      .reduce((sum, item) => sum + item.totalPrice, 0)
+      .toFixed(2)
+  );
+
+  if (!Number.isFinite(parsedTotalAmount) || parsedTotalAmount <= 0) {
+    return { status: "error", message: "Total inválido com base nos itens." };
   }
 
   try {

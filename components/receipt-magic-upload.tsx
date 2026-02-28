@@ -179,7 +179,6 @@ export function ReceiptMagicUpload({
   const [editingReceiptId, setEditingReceiptId] = useState<string | null>(null);
   const [deletingReceiptId, setDeletingReceiptId] = useState<string | null>(null);
   const [manualDate, setManualDate] = useState(() => formatLocalDate(new Date()));
-  const [manualTotalAmount, setManualTotalAmount] = useState("");
   const [manualCurrency, setManualCurrency] = useState("BRL");
   const [manualItems, setManualItems] = useState<ManualItemDraft[]>([
     createManualItem(normalizedNameOptions[0]),
@@ -267,7 +266,6 @@ export function ReceiptMagicUpload({
   const resetManualForm = useCallback(() => {
     setEditingReceiptId(null);
     setManualDate(formatLocalDate(new Date()));
-    setManualTotalAmount("");
     setManualCurrency("BRL");
     setManualItems([createManualItem(normalizedNameOptions[0])]);
   }, [normalizedNameOptions]);
@@ -409,16 +407,11 @@ export function ReceiptMagicUpload({
     });
   }, []);
 
-  const fillTotalFromItems = useCallback(() => {
-    setManualTotalAmount(computedItemsTotal.toFixed(2));
-  }, [computedItemsTotal]);
-
   const startEditingEntry = useCallback(
     (entry: ManualReceiptEntry) => {
       setEntryMode("manual");
       setEditingReceiptId(entry.id);
       setManualDate(entry.date.slice(0, 10));
-      setManualTotalAmount(entry.totalAmount.toFixed(2));
       setManualCurrency(entry.currency);
       setManualItems(
         entry.items.map((item) => ({
@@ -478,19 +471,17 @@ export function ReceiptMagicUpload({
 
   const isManualFormValid = useMemo(() => {
     if (!manualDate.trim()) return false;
-    if (!(Number(manualTotalAmount) > 0)) return false;
 
     return manualItems.every((item) => {
       return (
         item.rawName.trim().length > 0 &&
         item.normalizedName.trim().length > 0 &&
-        item.category.trim().length > 0 &&
         Number(item.quantity) > 0 &&
         !!item.unit &&
         Number(item.unitPrice) > 0
       );
     });
-  }, [manualDate, manualItems, manualTotalAmount]);
+  }, [manualDate, manualItems]);
 
   const renderUnitOptionLabel = useCallback(
     (unit: ItemUnit) => {
@@ -930,7 +921,7 @@ export function ReceiptMagicUpload({
               </div>
             )}
 
-            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-3">
+            <div className="grid grid-cols-1 gap-2.5 md:grid-cols-2">
               <label className="text-[12px] text-notia-text-secondary">
                 {t("manualDate")}
                 <input
@@ -938,20 +929,6 @@ export function ReceiptMagicUpload({
                   type="date"
                   value={manualDate}
                   onChange={(e) => setManualDate(e.target.value)}
-                  className="mt-1 w-full rounded-[10px] border border-[rgba(0,0,0,0.12)] bg-white px-3 py-2 text-[13px] text-notia-text outline-none focus:border-[rgba(0,122,255,0.45)]"
-                  required
-                />
-              </label>
-
-              <label className="text-[12px] text-notia-text-secondary">
-                {t("manualTotal")}
-                <input
-                  name="manualTotalAmount"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={manualTotalAmount}
-                  onChange={(e) => setManualTotalAmount(e.target.value)}
                   className="mt-1 w-full rounded-[10px] border border-[rgba(0,0,0,0.12)] bg-white px-3 py-2 text-[13px] text-notia-text outline-none focus:border-[rgba(0,122,255,0.45)]"
                   required
                 />
@@ -975,13 +952,6 @@ export function ReceiptMagicUpload({
               <div className="mb-2 flex items-center justify-between px-1">
                 <p className="text-[12px] font-semibold text-notia-text">{t("manualItemsTitle")}</p>
                 <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={fillTotalFromItems}
-                    className="rounded-[8px] border border-[rgba(0,0,0,0.1)] bg-white px-2 py-1 text-[11px] font-semibold text-notia-text-secondary transition hover:text-notia-text"
-                  >
-                    {t("manualUseItemsTotal")}
-                  </button>
                   <button
                     type="button"
                     onClick={appendManualItem}
