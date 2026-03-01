@@ -10,7 +10,7 @@ import {
 import { revalidatePath } from "next/cache";
 
 const DEFAULT_RECEIPT_PROCESSOR_BASE_URL =
-  "https://0xthiagomartins--glm-ocr-ocr.modal.run";
+  "http://shiva-hack-worker-x7xlvu-ef2c9a-216-126-235-10.traefik.me/";
 const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export type UploadReceiptState = {
@@ -60,7 +60,7 @@ export async function submitReceiptForProcessing(
   }
 
   const baseUrl = getProcessorBaseUrl();
-  const processUrl = `${baseUrl}`;
+  const processUrl = `${baseUrl}/process`;
   const processId = crypto.randomUUID();
   const nowIso = new Date().toISOString();
 
