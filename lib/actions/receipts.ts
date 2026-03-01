@@ -73,7 +73,6 @@ export async function createReceipt(input: CreateReceiptInput) {
   });
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/upload");
   return { success: true, receipt };
 }
 
@@ -179,35 +178,30 @@ export async function createManualParsedReceipt(
         : null;
 
     if (receiptId) {
-      const existing = await prisma.receipt.findFirst({
-        where: {
-          id: receiptId,
-          userId,
-        },
-      });
-
-      if (!existing) {
-        return {
-          status: "error",
-          message: "Entrada não encontrada.",
-        };
-      }
-
-      const receipt = await prisma.receipt.update({
-        where: { id: receiptId },
-        data: {
-          date: parsedDate,
-          totalAmount: parsedTotalAmount,
-          currency: safeCurrency,
-          items: {
-            deleteMany: {},
-            create: sanitizedItems,
+      // Use transaction for atomic update
+      const receipt = await prisma.$transaction(async (tx) => {
+        // Verify ownership and update in single query
+        const receipt = await tx.receipt.update({
+          where: { 
+            id: receiptId,
+            userId 
           },
-        },
+          data: {
+            date: parsedDate,
+            totalAmount: parsedTotalAmount,
+            currency: safeCurrency,
+            items: {
+              deleteMany: {},
+              create: sanitizedItems,
+            },
+          },
+        });
+
+        return receipt;
       });
 
+      // Single revalidate call
       revalidatePath("/dashboard");
-      revalidatePath("/dashboard/upload");
 
       return {
         status: "success",
@@ -223,15 +217,16 @@ export async function createManualParsedReceipt(
       items: sanitizedItems,
     });
 
+    // Single revalidate call
     revalidatePath("/dashboard");
-    revalidatePath("/dashboard/upload");
 
     return {
       status: "success",
       receiptId: receipt.id,
       message: "Nota adicionada manualmente com sucesso.",
     };
-  } catch {
+  } catch (error) {
+    console.error("Error saving manual receipt:", error);
     return {
       status: "error",
       message: "Não foi possível salvar a nota manualmente.",
@@ -267,7 +262,6 @@ export async function deleteManualReceiptEntry(
   }
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/upload");
 
   return {
     status: "success",
@@ -376,7 +370,6 @@ export async function deleteReceipt(id: string) {
   });
 
   revalidatePath("/dashboard");
-  revalidatePath("/dashboard/upload");
   return { success: true };
 }
 

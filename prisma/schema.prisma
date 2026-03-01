@@ -40,7 +40,8 @@ model Receipt {
   process     ProcessStatus? @relation(fields: [processId], references: [processId])
   createdAt   DateTime @default(now())
 
- 
+  @@index([userId])
+  @@index([date])
 }
 enum ItemUnit {
   MILLILITER
@@ -64,7 +65,9 @@ model Item {
   unitPrice      Float
   totalPrice     Float // quantity * unitPrice
   
- 
+  @@index([receiptId])
+  @@index([normalizedName])
+  @@index([category])
 }
 
 model Session {
