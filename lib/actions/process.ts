@@ -3,6 +3,11 @@
 import { requireUserId } from "@/lib/auth-server";
 import { prisma } from "@/lib/db";
 import {
+  createPresignedReceiptDownloadUrl,
+  MAX_RECEIPT_IMAGE_SIZE_BYTES,
+  readReceiptObjectAsBase64,
+} from "@/lib/r2-storage";
+import {
   isTerminalProcessStatus,
   normalizeProcessStatus,
   ProcessStatus,
@@ -11,7 +16,6 @@ import { revalidatePath } from "next/cache";
 
 const DEFAULT_RECEIPT_PROCESSOR_BASE_URL =
   "http://shiva-hack-worker-x7xlvu-ef2c9a-216-126-235-10.traefik.me/";
-const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 export type UploadReceiptState = {
   status: "idle" | "success" | "error";
@@ -36,23 +40,32 @@ export async function submitReceiptForProcessing(
   formData: FormData,
 ): Promise<UploadReceiptState> {
   const userId = await requireUserId();
+  const objectKeyRaw = formData.get("receiptObjectKey");
+  const objectKey =
+    typeof objectKeyRaw === "string" && objectKeyRaw.trim()
+      ? objectKeyRaw.trim()
+      : null;
   const file = formData.get("receiptImage");
 
-  if (!(file instanceof File) || file.size === 0) {
+  if (!objectKey && (!(file instanceof File) || file.size === 0)) {
     return {
       status: "error",
       message: "Select an image before submitting.",
     };
   }
 
-  if (!file.type.startsWith("image/")) {
+  if (!objectKey && file instanceof File && !file.type.startsWith("image/")) {
     return {
       status: "error",
       message: "Only image files are supported.",
     };
   }
 
-  if (file.size > MAX_IMAGE_SIZE_BYTES) {
+  if (
+    !objectKey &&
+    file instanceof File &&
+    file.size > MAX_RECEIPT_IMAGE_SIZE_BYTES
+  ) {
     return {
       status: "error",
       message: "Image is too large. Use a file up to 8MB.",
@@ -65,7 +78,13 @@ export async function submitReceiptForProcessing(
   const nowIso = new Date().toISOString();
 
   try {
-    const imageB64 = Buffer.from(await file.arrayBuffer()).toString("base64");
+    const imageB64 = objectKey
+      ? await readReceiptObjectAsBase64(objectKey)
+      : Buffer.from(await (file as File).arrayBuffer()).toString("base64");
+
+    const imageUrl = objectKey
+      ? await createPresignedReceiptDownloadUrl(objectKey)
+      : undefined;
 
     await prisma.processStatus.upsert({
       where: { processId },
@@ -81,11 +100,14 @@ export async function submitReceiptForProcessing(
         updatedAt: nowIso,
       },
     });
-    console.log("Submitting receipt for processing:", processId, {
+    console.log("Submitting receipt for processing", {
+      processId,
       processUrl,
       userId,
-      imageB64,
+      source: objectKey ? "r2" : "direct",
+      objectKey,
     });
+
     const response = await fetch(processUrl, {
       method: "POST",
       headers: {
@@ -95,6 +117,8 @@ export async function submitReceiptForProcessing(
         process_id: processId,
         user_id: userId,
         image_b64: imageB64,
+        image_url: imageUrl,
+        object_key: objectKey,
       }),
       cache: "no-store",
     });

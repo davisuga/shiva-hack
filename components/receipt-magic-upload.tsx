@@ -72,6 +72,7 @@ type ManualItemDraft = {
 
 const NEW_NORMALIZED_OPTION = "__new_normalized__";
 const PROCESS_STORAGE_KEY = "notia:tracked-processes";
+const MAX_IMAGE_SIZE_BYTES = 8 * 1024 * 1024;
 
 const initialUploadState: UploadReceiptState = {
   status: "idle",
@@ -90,6 +91,15 @@ type TrackedProcess = {
   status: ProcessStatus;
   updatedAt?: string;
   errorMessage?: string | null;
+};
+
+type PresignedUploadResponse = {
+  ok: boolean;
+  message?: string;
+  upload?: {
+    objectKey: string;
+    uploadUrl: string;
+  };
 };
 
 function loadTrackedProcessesFromStorage(): TrackedProcess[] {
@@ -187,6 +197,7 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
 
   const [isDragging, setIsDragging] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
+  const [isPreparingUpload, setIsPreparingUpload] = useState(false);
   const [localMessage, setLocalMessage] = useState<string | null>(null);
   const [cancelingProcessId, setCancelingProcessId] = useState<string | null>(null);
   const [trackedProcesses, setTrackedProcesses] = useState<TrackedProcess[]>(
@@ -194,8 +205,13 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
   );
 
   const localeTag = locale === "pt" ? "pt-BR" : "en-US";
+  const isUploadBusy = isUploadPending || isPreparingUpload;
 
   const feedbackMessage = useMemo(() => {
+    if (isPreparingUpload) {
+      return t("scanUploadingStorage");
+    }
+
     if (isUploadPending) {
       return uploadSteps[stepIndex] ?? uploadSteps[uploadSteps.length - 1];
     }
@@ -214,6 +230,7 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
 
     return null;
   }, [
+    isPreparingUpload,
     isUploadPending,
     localMessage,
     stepIndex,
@@ -330,15 +347,74 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
   const sendFile = useCallback(
     (file: File) => {
       setLocalMessage(null);
+
       if (!file.type.startsWith("image/")) {
         setLocalMessage(t("scanInvalidFormat"));
         return;
       }
-      const formData = new FormData();
-      formData.append("receiptImage", file);
-      startTransition(() => {
-        uploadAction(formData);
-      });
+
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        setLocalMessage(t("scanTooLarge"));
+        return;
+      }
+
+      void (async () => {
+        setIsPreparingUpload(true);
+        setLocalMessage(t("scanUploadingStorage"));
+
+        try {
+          const signedUrlResponse = await fetch("/api/receipts/upload-url", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              fileName: file.name,
+              contentType: file.type,
+              fileSizeBytes: file.size,
+            }),
+          });
+
+          const signedUrlData =
+            (await signedUrlResponse.json()) as PresignedUploadResponse;
+
+          if (
+            !signedUrlResponse.ok ||
+            !signedUrlData.ok ||
+            !signedUrlData.upload?.objectKey ||
+            !signedUrlData.upload?.uploadUrl
+          ) {
+            setLocalMessage(signedUrlData.message ?? t("scanUploadStorageError"));
+            return;
+          }
+
+          const uploadResponse = await fetch(signedUrlData.upload.uploadUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": file.type,
+            },
+            body: file,
+          });
+
+          if (!uploadResponse.ok) {
+            setLocalMessage(t("scanUploadStorageError"));
+            return;
+          }
+
+          setLocalMessage(null);
+
+          const formData = new FormData();
+          formData.append("receiptObjectKey", signedUrlData.upload.objectKey);
+
+          startTransition(() => {
+            uploadAction(formData);
+          });
+        } catch {
+          setLocalMessage(t("scanUploadStorageError"));
+        } finally {
+          setIsPreparingUpload(false);
+        }
+      })();
     },
     [t, uploadAction]
   );
@@ -774,7 +850,7 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
               <button
                 type="button"
                 onClick={() => cameraInputRef.current?.click()}
-                disabled={isUploadPending}
+                disabled={isUploadBusy}
                 className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[11px_6px] text-[12px] font-semibold text-notia-text-secondary transition hover:bg-[rgba(0,0,0,0.055)] hover:text-notia-text active:scale-[0.97] disabled:opacity-60"
               >
                 &#128247; {t("scanCamera")}
@@ -782,7 +858,7 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
               <button
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
-                disabled={isUploadPending}
+                disabled={isUploadBusy}
                 className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[11px_6px] text-[12px] font-semibold text-notia-text-secondary transition hover:bg-[rgba(0,0,0,0.055)] hover:text-notia-text active:scale-[0.97] disabled:opacity-60"
               >
                 &#128444;&#65039; {t("scanGallery")}
@@ -790,7 +866,7 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
               <button
                 type="button"
                 onClick={() => galleryInputRef.current?.click()}
-                disabled={isUploadPending}
+                disabled={isUploadBusy}
                 className="flex flex-1 items-center justify-center gap-[5px] rounded-[10px] border border-notia-accent bg-notia-accent p-[11px_6px] text-[12px] font-semibold text-white shadow-[0_2px_8px_rgba(0,122,255,0.28)] transition hover:shadow-[0_4px_14px_rgba(0,122,255,0.38)] active:scale-[0.97] disabled:opacity-60"
               >
                 &#10022; {t("scanProcess")}
@@ -800,24 +876,29 @@ export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
             {feedbackMessage && (
               <div
                 className={`animate-fade-up flex items-center gap-2.5 rounded-[10px] border border-[rgba(0,0,0,0.07)] bg-notia-bg p-[10px_14px] ${
-                  uploadState.status === "error"
+                  uploadState.status === "error" && !isPreparingUpload
                     ? "border-[rgba(255,59,48,0.2)] bg-notia-red-dim"
                     : ""
                 }`}
               >
-                {isUploadPending && (
+                {isUploadBusy && (
                   <span className="h-[18px] w-[18px] shrink-0 animate-spin rounded-full border-[2.5px] border-[rgba(0,122,255,0.2)] border-t-notia-accent" />
                 )}
                 <span
                   className={`flex-1 text-[12px] ${
-                    uploadState.status === "error"
+                    uploadState.status === "error" && !isPreparingUpload
                       ? "text-notia-red"
-                      : uploadState.status === "success"
+                      : uploadState.status === "success" &&
+                          !localMessage &&
+                          !isPreparingUpload
                         ? "font-bold text-notia-green"
                         : "text-notia-text-secondary"
                   }`}
                 >
-                  {uploadState.status === "success" && "✓  "}
+                  {uploadState.status === "success" &&
+                    !localMessage &&
+                    !isPreparingUpload &&
+                    "✓  "}
                   {feedbackMessage}
                 </span>
               </div>
