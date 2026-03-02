@@ -261,6 +261,13 @@ export async function syncReceiptProcessingStatuses(
         in: uniqueProcessIds,
       },
     },
+    select: {
+      processId: true,
+      status: true,
+      errorMessage: true,
+      createdAt: true,
+      updatedAt: true,
+    },
   });
 
   const byProcessId = new Map(rows.map((row) => [row.processId, row]));

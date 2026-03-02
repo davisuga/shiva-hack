@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  memo,
 } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
@@ -137,7 +138,7 @@ function formatLocalDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
-export function ReceiptMagicUpload({
+export const ReceiptMagicUpload = memo(function ReceiptMagicUpload({
   redirectToDashboard = false,
   className,
   normalizedNameOptions = [],
@@ -548,17 +549,28 @@ export function ReceiptMagicUpload({
         .map((item) => item.processId),
     [trackedProcesses]
   );
-  const activeProcessIdsKey = useMemo(
-    () => activeProcessIds.slice().sort().join(","),
-    [activeProcessIds]
-  );
 
   useEffect(() => {
     if (activeProcessIds.length === 0) return;
 
     let canceled = false;
+    let pollCount = 0;
+    const MAX_POLLS = 60; // 5 minutes max
+    const BASE_INTERVAL = 5000; // Start with 5 seconds
+    const MAX_INTERVAL = 15000; // Max 15 seconds
+
+    const getAdaptiveInterval = () => {
+      // Exponential backoff: 5s → 8s → 12s → 15s (max)
+      const nextInterval = Math.min(BASE_INTERVAL * Math.pow(1.5, pollCount), MAX_INTERVAL);
+      return nextInterval;
+    };
 
     const poll = async () => {
+      if (pollCount >= MAX_POLLS) {
+        canceled = true;
+        return;
+      }
+
       const batchResult = await syncReceiptProcessingStatuses(
         activeProcessIds
       ).catch(() => null);
@@ -602,16 +614,18 @@ export function ReceiptMagicUpload({
 
         return changed ? next : prev;
       });
+
+      pollCount++;
     };
 
     poll();
-    const interval = setInterval(poll, 3000);
+    const interval = setInterval(poll, getAdaptiveInterval());
 
     return () => {
       canceled = true;
       clearInterval(interval);
     };
-  }, [activeProcessIds, activeProcessIdsKey]);
+  }, [activeProcessIds]);
 
   const renderProcessStatusLabel = useCallback(
     (status: ProcessStatus) => {
@@ -1189,7 +1203,7 @@ export function ReceiptMagicUpload({
       )}
     </div>
   );
-}
+});
 
 function isTerminalProcessStatus(status: string) {
   const normalized = normalizeProcessStatus(status);

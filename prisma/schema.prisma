@@ -127,5 +127,6 @@ model ProcessStatus {
   updatedAt    String
   receipt       Receipt?
 
- 
+  @@index([status])
+  @@index([updatedAt])
 }
